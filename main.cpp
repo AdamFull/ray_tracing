@@ -4,12 +4,15 @@
 
 constexpr const uint32_t screen_width = 1280u;
 constexpr const uint32_t screen_height = 720u;
+constexpr const uint32_t sample_count = 5u;
+constexpr const uint32_t bounce_count = 100u;
 
 static void BM_ray_trace(benchmark::State& state)
 {
 	auto engine = std::make_unique<CRayEngine>();
 	//engine->create("../../meshes/Triangle/glTF/Triangle.gltf", screen_width, screen_height);
-	engine->create("../../meshes/DamagedHelmet/glTF/DamagedHelmet.gltf", screen_width, screen_height);
+	engine->create("../../meshes/DamagedHelmet/glTF/DamagedHelmet.gltf", screen_width, screen_height, sample_count);
+	//engine->create("../../meshes/cyberpunk/scene.gltf", screen_width, screen_height, sample_count);
 	
 	for (auto _ : state)
 		engine->update();

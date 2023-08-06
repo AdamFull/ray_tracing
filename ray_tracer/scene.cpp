@@ -12,6 +12,17 @@
 #define TINYGLTF_IMPLEMENTATION
 #include "lib/tiny_gltf.h"
 
+double getDoubleValueOrDefault(const std::string& name, const tinygltf::Value& val, double _default = 0.0)
+{
+	if (val.Has(name))
+	{
+		auto obj = val.Get(name);
+		return obj.GetNumberAsDouble();
+	}
+
+	return _default;
+}
+
 std::string url_decode(const std::string& str)
 {
 	std::string ret;
@@ -72,8 +83,16 @@ CScene::CScene(CResourceManager* resource_manager)
 	m_pResourceManager = resource_manager;
 }
 
-void CScene::create(const std::filesystem::path& scenepath)
+CScene::~CScene()
 {
+	delete m_pBVHTree;
+	m_pBVHTree = nullptr;
+}
+
+void CScene::create(const std::filesystem::path& scenepath, resource_id_t brdf_lut)
+{
+	m_brdf_lut_id = brdf_lut;
+
 	// Create root node
 	m_root = create_node(m_registry, "scene_root");
 
@@ -81,13 +100,15 @@ void CScene::create(const std::filesystem::path& scenepath)
 
 	m_parentPath = scenepath.parent_path();
 
+	m_pBVHTree = new CBVHTree();
+
 	// Load scene
 	load_gltf_scene(scenepath, 0u);
 }
 
 void CScene::build_acceleration()
 {
-	m_pBVHTree = std::make_shared<CBVHNode>(m_vHittableList, 0ull, m_vHittableList.size());
+	m_pBVHTree->create();
 }
 
 bool CScene::trace_ray(const FRay& ray, float t_min, float t_max, FHitResult& hit_result)
@@ -107,26 +128,6 @@ bool CScene::trace_ray(const FRay& ray, float t_min, float t_max, FHitResult& hi
 	//return was_hit;
 
 	return m_pBVHTree->hit(ray, t_min, t_max, hit_result);
-}
-
-bool CScene::bounds(FAxixAlignedBoundingBox& output_box)
-{
-	if (m_vHittableList.empty())
-		return false;
-
-	FAxixAlignedBoundingBox temp_box{};
-	bool first_box{ true };
-
-	for (auto& hittable : m_vHittableList)
-	{
-		if (!hittable->bounds(temp_box))
-			return false;
-
-		output_box = first_box ? temp_box : output_box.surrounding(temp_box);
-		first_box = false;
-	}
-
-	return true;
 }
 
 entt::registry& CScene::get_registry()
@@ -225,13 +226,16 @@ void CScene::load_materials(const tinygltf::Model& model)
 {
 	if (model.materials.empty())
 	{
-		m_vMaterialIds.emplace_back(m_pResourceManager->add_material("default_diffuse_material", std::make_unique<CDiffuseMaterial>(glm::vec3(0.5f))));
+		m_vMaterialIds.emplace_back(m_pResourceManager->add_material("default_diffuse_material", std::make_unique<CLambertianMaterial>(math::vec3(0.5f))));
 		return;
 	}
 
 	uint32_t matIndex{ 0 };
 	for (auto& mat : model.materials)
 	{
+		bool is_metallicRoughness{ false };
+		bool is_emissive{ false };
+
 		FMaterialCreateInfo material_ci{};
 
 		if (mat.values.find("baseColorTexture") != mat.values.end())
@@ -244,6 +248,7 @@ void CScene::load_materials(const tinygltf::Model& model)
 		{
 			auto texture = mat.values.at("metallicRoughnessTexture");
 			material_ci.m_textures.emplace(ETextureType::eMetallRoughness, m_vTextureIds.at(texture.TextureIndex()));
+			is_metallicRoughness = true;
 		}
 
 		if (mat.additionalValues.find("normalTexture") != mat.additionalValues.end())
@@ -264,21 +269,65 @@ void CScene::load_materials(const tinygltf::Model& model)
 		{
 			auto texture = mat.additionalValues.at("emissiveTexture");
 			material_ci.m_textures.emplace(ETextureType::eEmission, m_vTextureIds.at(texture.TextureIndex()));
+			is_emissive = true;
 		}
 
 		if (mat.additionalValues.find("emissiveFactor") != mat.additionalValues.end())
-			material_ci.m_emissiveFactor = glm::make_vec3(mat.additionalValues.at("emissiveFactor").ColorFactor().data());
+		{
+			material_ci.m_emissiveFactor = math::make_vec3(mat.additionalValues.at("emissiveFactor").ColorFactor().data());
+			is_emissive = true;
+		}
 
 		if (mat.values.find("roughnessFactor") != mat.values.end())
+		{
 			material_ci.m_fRoughnessFactor = static_cast<float>(mat.values.at("roughnessFactor").Factor());
+			is_metallicRoughness = true;
+		}
 
 		if (mat.values.find("metallicFactor") != mat.values.end())
+		{
 			material_ci.m_fMetallicFactor = static_cast<float>(mat.values.at("metallicFactor").Factor());
+			is_metallicRoughness = true;
+		}
 
 		if (mat.values.find("baseColorFactor") != mat.values.end())
-			material_ci.m_baseColorFactor = glm::make_vec4(mat.values.at("baseColorFactor").ColorFactor().data());
+			material_ci.m_baseColorFactor = math::make_vec4(mat.values.at("baseColorFactor").ColorFactor().data());
 
-		auto new_material = std::make_unique<CDiffuseMaterial>(m_pResourceManager);
+		if (mat.additionalValues.find("alphaMode") != mat.additionalValues.end())
+		{
+			tinygltf::Parameter param = mat.additionalValues.at("alphaMode");
+			if (param.string_value == "BLEND")
+				material_ci.m_alphaMode = EAlphaMode::eBlend;
+			else  if (param.string_value == "MASK")
+				material_ci.m_alphaMode = EAlphaMode::eMask;
+			else
+				material_ci.m_alphaMode = EAlphaMode::eOpaque;
+		}
+
+		if (mat.additionalValues.find("alphaCutoff") != mat.additionalValues.end())
+			material_ci.m_alphaCutoff = static_cast<float>(mat.additionalValues.at("alphaCutoff").Factor());
+
+		for (auto& [name, data] : mat.extensions)
+		{
+			if (name == "KHR_materials_emissive_strength")
+			{
+				material_ci.m_emissiveStrength = getDoubleValueOrDefault("emissiveStrength", data, 1.0);
+				is_emissive = true;
+			}
+		}
+
+		// Create concrete material
+		std::unique_ptr<CMaterial> new_material{};
+		if (is_emissive)
+			new_material = std::make_unique<CEmissiveMaterial>(m_pResourceManager);
+		else if (is_metallicRoughness)
+		{
+			new_material = std::make_unique<CMetalRoughnessMaterial>(m_pResourceManager);
+			material_ci.m_textures.emplace(ETextureType::eBRDFLut, m_brdf_lut_id);
+		}
+		else
+			new_material = std::make_unique<CLambertianMaterial>(m_pResourceManager);
+
 		new_material->create(material_ci);
 
 		m_vMaterialIds.emplace_back(m_pResourceManager->add_material(mat.name, std::move(new_material)));
@@ -343,9 +392,6 @@ void CScene::load_mesh_component(const entt::entity& target, const tinygltf::Nod
 
 	const tinygltf::Mesh& mesh = model.meshes[node.mesh];
 
-	m_registry.emplace<FMeshComponent>(target, FMeshComponent{});
-	auto& mesh_component = m_registry.get<FMeshComponent>(target);
-
 	for (size_t j = 0; j < mesh.primitives.size(); j++)
 	{
 		std::vector<uint32_t> indexBuffer;
@@ -357,8 +403,7 @@ void CScene::load_mesh_component(const entt::entity& target, const tinygltf::Nod
 		uint32_t vertexStart = static_cast<uint32_t>(vbo->get_last_vertex());
 		uint32_t indexCount = 0;
 		uint32_t vertexCount = 0;
-		glm::vec3 posMin{};
-		glm::vec3 posMax{};
+
 		bool bHasNormals{ false };
 
 		// Vertices
@@ -377,8 +422,6 @@ void CScene::load_mesh_component(const entt::entity& target, const tinygltf::Nod
 			const tinygltf::Accessor& posAccessor = model.accessors[primitive.attributes.find("POSITION")->second];
 			const tinygltf::BufferView& posView = model.bufferViews[posAccessor.bufferView];
 			bufferPos = reinterpret_cast<const float*>(&(model.buffers[posView.buffer].data[posAccessor.byteOffset + posView.byteOffset]));
-			posMin = glm::vec3(posAccessor.minValues[0], posAccessor.minValues[1], posAccessor.minValues[2]);
-			posMax = glm::vec3(posAccessor.maxValues[0], posAccessor.maxValues[1], posAccessor.maxValues[2]);
 
 			// Load model normals
 			if (primitive.attributes.find("NORMAL") != primitive.attributes.end())
@@ -407,61 +450,32 @@ void CScene::load_mesh_component(const entt::entity& target, const tinygltf::Nod
 				bufferColors = reinterpret_cast<const float*>(&(model.buffers[colorView.buffer].data[colorAccessor.byteOffset + colorView.byteOffset]));
 			}
 
-			//// Load tangent
-			//if (primitive.attributes.find("TANGENT") != primitive.attributes.end())
-			//{
-			//	const tinygltf::Accessor& tangentAccessor = model.accessors[primitive.attributes.find("TANGENT")->second];
-			//	const tinygltf::BufferView& tangentView = model.bufferViews[tangentAccessor.bufferView];
-			//	bufferTangents = reinterpret_cast<const float*>(&(model.buffers[tangentView.buffer].data[tangentAccessor.byteOffset + tangentView.byteOffset]));
-			//	bHasTangents = true;
-			//}
-
-			//// Load joints
-			//if (primitive.attributes.find("JOINTS_0") != primitive.attributes.end())
-			//{
-			//	const tinygltf::Accessor& jointAccessor = model.accessors[primitive.attributes.find("JOINTS_0")->second];
-			//	const tinygltf::BufferView& jointView = model.bufferViews[jointAccessor.bufferView];
-			//	bufferJoints = reinterpret_cast<const uint16_t*>(&(model.buffers[jointView.buffer].data[jointAccessor.byteOffset + jointView.byteOffset]));
-			//}
-			//
-			//// Load weight
-			//if (primitive.attributes.find("WEIGHTS_0") != primitive.attributes.end())
-			//{
-			//	const tinygltf::Accessor& uvAccessor = model.accessors[primitive.attributes.find("WEIGHTS_0")->second];
-			//	const tinygltf::BufferView& uvView = model.bufferViews[uvAccessor.bufferView];
-			//	bufferWeights = reinterpret_cast<const float*>(&(model.buffers[uvView.buffer].data[uvAccessor.byteOffset + uvView.byteOffset]));
-			//}
-
 			vertexCount = static_cast<uint32_t>(posAccessor.count);
 
 			for (size_t v = 0; v < posAccessor.count; v++)
 			{
 				FVertex vert{};
-				vert.position = glm::vec4(glm::make_vec3(&bufferPos[v * 3]), 1.0f);
-				vert.normal = glm::normalize(glm::vec3(bufferNormals ? glm::make_vec3(&bufferNormals[v * 3]) : glm::vec3(0.0f)));
-				//vert.normal = glm::vec3(0.f);
-				vert.texcoord = bufferTexCoords ? glm::make_vec2(&bufferTexCoords[v * 2]) : glm::vec3(0.0f);
+				vert.position = math::make_vec3(&bufferPos[v * 3]);
+				vert.normal = math::normalize(math::vec3(bufferNormals ? math::make_vec3(&bufferNormals[v * 3]) : math::vec3(0.0f)));
+
+				vert.texcoord = bufferTexCoords ? math::make_vec2(&bufferTexCoords[v * 2]) : math::vec2(0.0f);
 				if (bufferColors)
 				{
 					switch (numColorComponents)
 					{
 					case 3:
-						vert.color = glm::vec4(glm::make_vec3(&bufferColors[v * 3]), 1.0f);
+						vert.color = math::make_vec3(&bufferColors[v * 3]);
 						break;
 					case 4:
-						vert.color = glm::make_vec4(&bufferColors[v * 4]);
+						vert.color = math::make_vec3(&bufferColors[v * 4]);
 						break;
 					}
 				}
 				else
 				{
-					vert.color = glm::vec4(1.0f);
+					vert.color = math::vec3(1.0f);
 				}
-				//vert.tangent = bufferTangents ? glm::vec4(glm::make_vec4(&bufferTangents[v * 4])) : glm::vec4(0.0f);
-				//vert.tangent = glm::vec4(0.f);
-				// TODO: Add skinning
-				//vert.joint0 = bHasSkin ? glm::vec4(glm::make_vec4(&bufferJoints[v * 4])) : glm::vec4(0.0f);
-				//vert.weight0 = bHasSkin ? glm::make_vec4(&bufferWeights[v * 4]) : glm::vec4(0.0f);
+
 				vertexBuffer.push_back(vert);
 			}
 		}
@@ -514,20 +528,10 @@ void CScene::load_mesh_component(const entt::entity& target, const tinygltf::Nod
 			}
 		}
 
-		FMeshPrimitive mesh_primitive{};
-		mesh_primitive.set_dimensions(posMin, posMax);
-
-		resource_id_t material_id{ 0ull };
+		resource_id_t material_id{ invalid_index };
 		// Attaching materials
 		if (!m_vMaterialIds.empty())
 			material_id = primitive.material != invalid_index ? m_vMaterialIds.at(primitive.material) : m_vMaterialIds.back();
-
-		mesh_primitive.m_begin_index = indexStart;
-		mesh_primitive.m_index_count = indexCount;
-		mesh_primitive.m_begin_vertex = vertexStart;
-		mesh_primitive.m_vertex_count = vertexCount;
-
-		//vbo->add_mesh_data(vertexBuffer, indexBuffer);
 
 		for (uint32_t index = 0u; index < indexBuffer.size(); index += 3u)
 		{
@@ -539,19 +543,9 @@ void CScene::load_mesh_component(const entt::entity& target, const tinygltf::Nod
 			auto& v1 = vertexBuffer.at(i1);
 			auto& v2 = vertexBuffer.at(i2);
 
-			m_vHittableList.emplace_back(std::make_unique<CTriangle>(m_registry, target, material_id, v0, v1, v2));
+			m_pBVHTree->emplace(new CTriangle(m_registry, target, material_id, v0, v1, v2));
 		}
-
-		mesh_component.primitives.emplace_back(mesh_primitive);
 	}
-
-	mesh_component.vbo_id = m_sceneVBO;
-	
-	std::sort(mesh_component.primitives.begin(), mesh_component.primitives.end(),
-		[](const FMeshPrimitive& a, const FMeshPrimitive& b)
-		{
-			return a.m_material_id < b.m_material_id;
-		});
 }
 
 void CScene::load_camera_component(const entt::entity& target, const tinygltf::Node& node, const tinygltf::Model& model)
@@ -582,12 +576,12 @@ void CScene::load_light_component(const entt::entity& target, uint32_t light_ind
 {
 	const tinygltf::Light light = model.lights[light_index];
 
-	glm::vec3 color;
+	math::vec3 color;
 
 	if (light.color.empty())
-		color = glm::vec3(1.f);
+		color = math::vec3(1.f);
 	else
-		color = glm::make_vec3(light.color.data());
+		color = math::make_vec3(light.color.data());
 
 	if (light.type == "directional")
 	{
@@ -614,97 +608,3 @@ void CScene::load_light_component(const entt::entity& target, uint32_t light_ind
 		m_registry.emplace<FPointLightComponent>(target, lightComponent);
 	}
 }
-
-/*bool ray_sphere_intersect(const Ray& ray, const glm::vec3& position, const float radius, glm::vec2& result)
-{
-	auto oc = ray._origin - position;
-	auto a = glm::dot(ray._direction, ray._direction);
-	auto half_b = glm::dot(oc, ray._direction);
-	auto c = glm::dot(oc, oc) - radius * radius;
-
-	auto discriminant = half_b * half_b - a * c;
-	if (discriminant < 0.f)
-	{
-		result.x = result.y = -1.f;
-		return false;
-	}
-
-	discriminant = glm::sqrt(discriminant);
-	
-	result.x = (-half_b - discriminant) / a;
-	result.y = (-half_b + discriminant) / a;
-	return true;
-}
-
-Sphere::Sphere(const glm::vec3& position, const float radius, int64_t material) :
-	_position(position), _radius(radius), _material_id(material)
-{
-}
-
-bool Sphere::hit(const Ray& ray, float t_min, float t_max, HitResult& hit) const
-{
-	glm::vec2 intersection{};
-	bool is_intersected = ray_sphere_intersect(ray, _position, _radius, intersection);
-
-	if (!is_intersected)
-		return false;
-
-	hit._hit = intersection.x;
-	if (hit._hit < t_min || t_max < hit._hit)
-	{
-		hit._hit = intersection.y;
-		if (hit._hit < t_min || t_max < hit._hit)
-			return false;
-	}
-	
-	hit._position = ray.at(hit._hit);
-	auto outward_normal = (hit._position - _position) / _radius;
-	hit.set_face_normal(ray, outward_normal);
-	hit._material_id = _material_id;
-
-	return true;
-}
-
-void Scene::add_object(std::unique_ptr<Hittable>&& object)
-{
-	_scene_objects.emplace_back(std::move(object));
-}
-
-const std::vector<std::unique_ptr<Hittable>>& Scene::get_objects() const
-{
-	return _scene_objects;
-}
-
-int64_t Scene::add_material(std::unique_ptr<Material>&& material)
-{
-	auto idx = _materials.size();
-	_materials.emplace_back(std::move(material));
-	return idx;
-}
-
-const std::unique_ptr<Material>& Scene::get_material(int64_t id) const
-{
-	if (id == -1)
-		return nullptr;
-
-	return _materials[id];
-}
-
-bool Scene::trace_ray(const Ray& ray, float t_min, float t_max, HitResult& hit)
-{
-	HitResult hit_result{};
-	bool hit_something{ false };
-	float closest_hit{ t_max };
-
-	for (auto& object : _scene_objects)
-	{
-		if (object->hit(ray, t_min, closest_hit, hit_result))
-		{
-			hit_something = true;
-			closest_hit = hit_result._hit;
-			hit = hit_result;
-		}
-	}
-
-	return hit_something;
-}*/

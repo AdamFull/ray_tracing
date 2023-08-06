@@ -67,5 +67,5 @@ const uint32_t CImage::get_width() const
 
 const uint32_t CImage::get_height() const
 {
-	return m_uWidth;
+	return m_uHeight;
 }

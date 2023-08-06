@@ -1,13 +1,13 @@
 #include "resource_manager.h"
 
-glm::vec4 unpack_rgba(uint32_t packed_color)
+math::vec4 unpack_rgba(uint32_t packed_color)
 {
 	float a = static_cast<float>((packed_color >> 24u) & 0xFFu) / 255.0f;
 	float b = static_cast<float>((packed_color >> 16u) & 0xFFu) / 255.0f;
 	float g = static_cast<float>((packed_color >> 8u) & 0xFFu) / 255.0f;
 	float r = static_cast<float>(packed_color & 0xFFu) / 255.0f;
 
-	return glm::vec4(r, g, b, a);
+	return math::vec4(r, g, b, a);
 }
 
 CSampler::CSampler(CResourceManager* resource_manager)
@@ -23,7 +23,7 @@ void CSampler::create(EFilterMode filterMin, EFilterMode filterMag, EWrapMode wr
 	m_wrapT = wrapT;
 }
 
-glm::vec4 CSampler::sample(resource_id_t image_id, const glm::vec2& uv)
+math::vec4 CSampler::sample(resource_id_t image_id, const math::vec2& uv)
 {
 	auto& image = m_pResourceManager->get_image(image_id);
 
@@ -40,7 +40,7 @@ glm::vec4 CSampler::sample(resource_id_t image_id, const glm::vec2& uv)
 		x %= width;
 		break;
 	case EWrapMode::eClampToEdge:
-		x = glm::clamp(x, 0u, width);
+		x = math::clamp(x, 0u, width);
 		break;
 	case EWrapMode::eMirroredRepeat:
 	{
@@ -60,7 +60,7 @@ glm::vec4 CSampler::sample(resource_id_t image_id, const glm::vec2& uv)
 		y %= height;
 		break;
 	case EWrapMode::eClampToEdge:
-		y = glm::clamp(y, 0u, height);
+		y = math::clamp(y, 0u, height);
 		break;
 	case EWrapMode::eMirroredRepeat:
 	{
@@ -77,12 +77,12 @@ glm::vec4 CSampler::sample(resource_id_t image_id, const glm::vec2& uv)
 	return nearest_interpolation(image.get(), x, y);
 }
 
-glm::vec4 CSampler::nearest_interpolation(CImage* image, uint32_t x, uint32_t y)
+math::vec4 CSampler::nearest_interpolation(CImage* image, uint32_t x, uint32_t y)
 {
 	return unpack_rgba(image->get_pixel(x, y));
 }
 
-glm::vec4 CSampler::bilinear_interpolation(CImage* image, uint32_t x0, uint32_t y0)
+math::vec4 CSampler::bilinear_interpolation(CImage* image, uint32_t x0, uint32_t y0)
 {
 	uint32_t width = image->get_width();
 	uint32_t heigth = image->get_height();
@@ -93,20 +93,20 @@ glm::vec4 CSampler::bilinear_interpolation(CImage* image, uint32_t x0, uint32_t 
 	x0 = (x0 % width + width) % width;
 	y0 = (y0 % heigth + heigth) % heigth;
 
-	glm::vec4 Q11 = unpack_rgba(image->get_pixel(x0, y0));
-	glm::vec4 Q12 = unpack_rgba(image->get_pixel(x0, y1));
-	glm::vec4 Q21 = unpack_rgba(image->get_pixel(x1, y0));
-	glm::vec4 Q22 = unpack_rgba(image->get_pixel(x1, y1));
+	math::vec4 Q11 = unpack_rgba(image->get_pixel(x0, y0));
+	math::vec4 Q12 = unpack_rgba(image->get_pixel(x0, y1));
+	math::vec4 Q21 = unpack_rgba(image->get_pixel(x1, y0));
+	math::vec4 Q22 = unpack_rgba(image->get_pixel(x1, y1));
 
 	float x1_x0 = x1 - x1;
 	float y1_y0 = y1 - y0;
 	float x0_x1 = x0 - x1;
 	float y0_y1 = y0 - y1;
 
-	glm::vec4 R1 = (x1_x0 * Q11 + x0_x1 * Q21) / x1_x0;
-	glm::vec4 R2 = (x1_x0 * Q12 + x0_x1 * Q22) / x1_x0;
+	math::vec4 R1 = (x1_x0 * Q11 + x0_x1 * Q21) / x1_x0;
+	math::vec4 R2 = (x1_x0 * Q12 + x0_x1 * Q22) / x1_x0;
 
-	glm::vec4 P = (y1_y0 * R1 + y0_y1 * R2) / y1_y0;
+	math::vec4 P = (y1_y0 * R1 + y0_y1 * R2) / y1_y0;
 
 	return P;
 }

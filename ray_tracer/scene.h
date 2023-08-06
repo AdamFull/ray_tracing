@@ -3,7 +3,6 @@
 #include "lib/tiny_gltf.h"
 #include "shared.h"
 #include "ecs/components/fwdecl.h"
-#include "hittable.h"
 #include "bvh_tree.h"
 
 //class Sphere : public Hittable
@@ -27,12 +26,12 @@ class CScene
 public:
 	CScene() = default;
 	CScene(CResourceManager* resource_manager);
+	~CScene();
 
-	void create(const std::filesystem::path& scenepath);
+	void create(const std::filesystem::path& scenepath, resource_id_t brdf_lut);
 	void build_acceleration();
 
 	bool trace_ray(const FRay& ray, float t_min, float t_max, FHitResult& hit_result);
-	bool bounds(FAxixAlignedBoundingBox& output_box);
 
 	entt::registry& get_registry();
 	const entt::entity& get_root();
@@ -53,13 +52,13 @@ private:
 	entt::registry m_registry{};
 	entt::entity m_root{};
 
-	std::vector<std::shared_ptr<CHittable>> m_vHittableList{};
-	std::shared_ptr<CBVHNode> m_pBVHTree{};
+	CBVHTree* m_pBVHTree{ nullptr };
 
 	std::vector<resource_id_t> m_vSamplerIds{};
 	std::vector<resource_id_t> m_vTextureIds{};
 	std::vector<resource_id_t> m_vMaterialIds{};
 
+	resource_id_t m_brdf_lut_id{ invalid_index };
 	resource_id_t m_sceneVBO{ invalid_index };
 
 	std::filesystem::path m_parentPath{};

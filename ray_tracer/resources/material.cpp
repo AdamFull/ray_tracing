@@ -1,22 +1,28 @@
 #include "resource_manager.h"
 #include "util.h"
 
-glm::vec3 F_SchlickR(float cosTheta, const glm::vec3& F0, float roughness)
+#include "ggx.hpp"
+
+math::vec3 sample_hemisphere(const math::vec3& tangent, const math::vec3& bitangent, const math::vec3& normal)
 {
-	return F0 + (glm::max(glm::vec3(1.0f - roughness), F0) - F0) * glm::pow(1.0f - cosTheta, 5.0f);
+	float u = random<float>();
+	float v = random<float>();
+
+	float theta = 2 * std::numbers::pi_v<float> * u;
+	float phi = std::acos(2.f * v - 1.f);
+
+	math::vec3 direction(std::sin(phi) * std::cos(theta), std::sin(phi) * std::sin(theta), std::cos(phi));
+
+	direction = math::apply_otb(tangent, bitangent, normal, direction);
+	return direction;
 }
 
-glm::mat3 calculate_tbn(const glm::vec3& tangent, const glm::vec3& bitangent, glm::vec3& normal)
+math::vec3 calculate_tangent_space_normal(const math::vec3 normal_color, const math::vec3& tangent, const math::vec3& bitangent, const math::vec3& normal, float scale)
 {
-	return glm::mat3{ tangent, bitangent, normal };
+	return math::normalize(math::apply_otb(tangent, bitangent, normal, ((2.f * normal_color - 1.f) * math::vec3(scale, scale, 1.0))));
 }
 
-glm::vec3 calculate_tangent_space_normal(const glm::vec3 normal_color, const glm::mat3& tbn, float scale)
-{
-	return glm::normalize(tbn * ((2.f * normal_color - 1.f) * glm::vec3(scale, scale, 1.0)));
-}
-
-glm::vec4 CMaterial::sample_texture(ETextureType texture, const glm::vec2& uv) const
+math::vec4 CMaterial::sample_texture(ETextureType texture, const math::vec2& uv) const
 {
 	auto found_texture = m_textures.find(texture);
 	if (found_texture != m_textures.end())
@@ -27,36 +33,66 @@ glm::vec4 CMaterial::sample_texture(ETextureType texture, const glm::vec2& uv) c
 		return sampler->sample(found_texture->second, uv);
 	}
 
-	return glm::vec4(0.f);
+	return math::vec4(0.f);
 }
 
-glm::vec3 CMaterial::sample_tangent_space_normal(const glm::vec2& uv, const glm::vec3& tangent, const glm::vec3& bitangent, const glm::vec3& normal) const
+math::vec3 CMaterial::sample_tangent_space_normal(const math::vec2& uv, const math::vec3& tangent, const math::vec3& bitangent, const math::vec3& normal) const
 {
 	if (m_textures.count(ETextureType::eNormal))
 		return normal;
 	
-	auto sampled_normal = glm::vec3(sample_texture(ETextureType::eNormal, uv));
+	auto sampled_normal = math::to_vec3(sample_texture(ETextureType::eNormal, uv));
 
-	return calculate_tangent_space_normal(sampled_normal, glm::mat3(tangent, bitangent, normal), 1.f);
+	return calculate_tangent_space_normal(sampled_normal, tangent, bitangent, normal, 1.f);
 }
 
 
-
-CDiffuseMaterial::CDiffuseMaterial(CResourceManager* resource_manager)
+// Lambertian material
+CLambertianMaterial::CLambertianMaterial(CResourceManager* resource_manager)
 {
 	m_pResourceManager = resource_manager;
 }
 
-void CDiffuseMaterial::create(const FMaterialCreateInfo& createInfo)
+void CLambertianMaterial::create(const FMaterialCreateInfo& createInfo)
 {
 	m_textures = createInfo.m_textures;
-	m_albedo = glm::vec3(createInfo.m_baseColorFactor);
-	m_emissive = createInfo.m_emissiveFactor;
+	m_albedo = math::to_vec3(createInfo.m_baseColorFactor);
+}
+
+bool CLambertianMaterial::scatter(const FRay& in_ray, const FHitResult& hit_result, math::vec3& color, FRay& out_ray, float& pdf) const
+{
+	// Sampling tangent space normal
+	auto ts_normal = sample_tangent_space_normal(hit_result.m_texcoord, hit_result.m_tangent, hit_result.m_bitangent, hit_result.m_normal);
+
+	out_ray.m_origin = hit_result.m_position;
+	out_ray.m_direction = ts_normal + sample_hemisphere(hit_result.m_tangent, hit_result.m_bitangent, hit_result.m_normal);
+
+	pdf = math::dot(ts_normal, out_ray.m_direction) / std::numbers::pi_v<float>;
+
+	auto albedo = m_albedo * hit_result.m_color;
+	if (m_textures.count(ETextureType::eAlbedo))
+		albedo *= math::to_vec3(sample_texture(ETextureType::eAlbedo, hit_result.m_texcoord));
+
+	color = albedo;
+
+	return true;
+}
+
+
+CMetalRoughnessMaterial::CMetalRoughnessMaterial(CResourceManager* resource_manager)
+{
+	m_pResourceManager = resource_manager;
+}
+
+void CMetalRoughnessMaterial::create(const FMaterialCreateInfo& createInfo)
+{
+	m_textures = createInfo.m_textures;
+	m_albedo = math::to_vec3(createInfo.m_baseColorFactor);
 	m_metallic = createInfo.m_fMetallicFactor;
 	m_roughness = createInfo.m_fRoughnessFactor;
 }
 
-bool CDiffuseMaterial::scatter(const FRay& in_ray, const FHitResult& hit_result, glm::vec3& color, FRay& out_ray) const
+bool CMetalRoughnessMaterial::scatter(const FRay& in_ray, const FHitResult& hit_result, math::vec3& color, FRay& out_ray, float& pdf) const
 {
 	// Sampling tangent space normal
 	auto ts_normal = sample_tangent_space_normal(hit_result.m_texcoord, hit_result.m_tangent, hit_result.m_bitangent, hit_result.m_normal);
@@ -68,78 +104,96 @@ bool CDiffuseMaterial::scatter(const FRay& in_ray, const FHitResult& hit_result,
 	{
 		auto sampled_mr = sample_texture(ETextureType::eMetallRoughness, hit_result.m_texcoord);
 	
-		roughness = roughness * sampled_mr.g;
-		metallic = metallic * sampled_mr.b;
-		roughness = glm::clamp(roughness, 0.04f, 1.f);
+		roughness = roughness * sampled_mr.y;
+		metallic = metallic * sampled_mr.z;
+		roughness = math::clamp(roughness, 0.04f, 1.f);
 	}
 
 	out_ray.m_origin = hit_result.m_position;
-	out_ray.m_direction = glm::reflect(glm::normalize(in_ray.m_direction), ts_normal + roughness * glm::normalize(random_unit_vec3<float>()));
+	out_ray.set_direction(importanceSample_GGX(math::vec2(random<float>(), random<float>()), roughness, ts_normal));
 
 	// Sampling albedo texture
 	auto albedo = m_albedo * hit_result.m_color;
 	if(m_textures.count(ETextureType::eAlbedo))
-		albedo *= glm::vec3(sample_texture(ETextureType::eAlbedo, hit_result.m_texcoord));
+		albedo *= math::to_vec3(sample_texture(ETextureType::eAlbedo, hit_result.m_texcoord));
 
-	glm::vec3 F0{ 0.04f };
-	F0 = glm::mix(F0, albedo, metallic);
+	// Calculate pdf
+	math::vec3 V = in_ray.m_direction * -1.f;
+	math::vec3 h = math::normalize(out_ray.m_direction + V);
 
-	float cosine = glm::dot(glm::normalize(out_ray.m_direction), glm::normalize(ts_normal));
-	glm::vec3 F = F_SchlickR(glm::max(cosine, 0.0f), F0, roughness);
+	float dotNH = math::dot(ts_normal, h);
+	float dotVH = math::dot(V, h);
 
-	glm::vec3 kD = 1.f - F;
+	pdf = D_GGX(dotNH, roughness) * dotNH / (4.0f * dotVH);
+
+	// calculate the BRDF using BRDF LUT
+	float cosThetaI = math::dot(out_ray.m_direction, ts_normal);
+	math::vec2 brdf_lut_uv = math::vec2(cosThetaI, roughness);
+	math::vec2 brdf{ 0.f };
+	if (m_textures.count(ETextureType::eBRDFLut))
+		brdf = math::to_vec2(sample_texture(ETextureType::eBRDFLut, brdf_lut_uv));
+	
+	math::vec3 F0{ 0.04f };
+	F0 = math::mix(F0, albedo, metallic);
+	
+	math::vec3 F = F_SchlickR(cosThetaI, F0, roughness);
+	
+	math::vec3 specular = F * brdf.x * brdf.y;
+	
+	math::vec3 kD = 1.f - F;
 	kD *= 1.f - metallic;
+	color = kD * albedo + specular;
 
-	color = albedo;
-
-	return glm::dot(out_ray.m_direction, ts_normal) > 0.f;
+	return cosThetaI > 0.f;
 }
 
-glm::vec3 CDiffuseMaterial::emit(const FHitResult& hit_result) const
+float CMetalRoughnessMaterial::scatter_pdf(const FRay& in_ray, const FHitResult& hit_result, const FRay& out_ray) const
 {
-	if (!hit_result.m_bFrontFace)
-		return glm::vec3(0.f);
+	auto cosine = math::dot(hit_result.m_normal, out_ray.m_direction);
+	return cosine < 0.f ? 0.f : cosine / std::numbers::pi_v<float>;
+}
 
-	glm::vec3 emission{ 0.f };
+
+// Emissive material
+CEmissiveMaterial::CEmissiveMaterial(CResourceManager* resource_manager)
+{
+	m_pResourceManager = resource_manager;
+}
+
+void CEmissiveMaterial::create(const FMaterialCreateInfo& createInfo)
+{
+	m_textures = createInfo.m_textures;
+	m_emissive = createInfo.m_emissiveFactor;
+	m_emissionStrength = createInfo.m_emissiveStrength;
+}
+
+math::vec3 CEmissiveMaterial::emit(const FHitResult& hit_result) const
+{
+	math::vec3 emission{ m_emissive };
 	if (m_textures.count(ETextureType::eEmission))
-		emission = m_emissive * glm::vec3(sample_texture(ETextureType::eEmission, hit_result.m_texcoord));
-	emission *= m_emissionStrength;
+		emission *= math::to_vec3(sample_texture(ETextureType::eEmission, hit_result.m_texcoord));
 
-	return emission;
+	return emission * m_emissionStrength;
 }
 
-
-void CMetallRoughnessMaterial::create(const FMaterialCreateInfo& createInfo)
-{
-
-}
-
-bool CMetallRoughnessMaterial::scatter(const FRay& in_ray, const FHitResult& hit_result, glm::vec3& color, FRay& out_ray) const
-{
-	out_ray.m_origin = hit_result.m_position;
-	out_ray.m_direction = glm::reflect(glm::normalize(in_ray.m_direction), hit_result.m_normal) + m_fRoughness * glm::normalize(random_unit_vec3<float>());
-	color *= m_albedo;
-	return glm::dot(out_ray.m_direction, hit_result.m_normal) > 0.f;
-}
-
-
+// Dielectric material
 void CDielectricMaterial::create(const FMaterialCreateInfo& createInfo)
 {
 
 }
 
-bool CDielectricMaterial::scatter(const FRay& in_ray, const FHitResult& hit_result, glm::vec3& color, FRay& out_ray) const
+bool CDielectricMaterial::scatter(const FRay& in_ray, const FHitResult& hit_result, math::vec3& color, FRay& out_ray, float& pdf) const
 {
 	float refraction_ratio = hit_result.m_bFrontFace ? (1.f / m_fIor) : m_fIor;
 
-	auto direction = glm::normalize(in_ray.m_direction);
-	float cos_theta = std::fmin(glm::dot(-direction, hit_result.m_normal), 1.f);
-	float sin_theta = glm::sqrt(1.f - cos_theta * cos_theta);
+	auto direction = math::normalize(in_ray.m_direction);
+	float cos_theta = std::fmin(math::dot(-direction, hit_result.m_normal), 1.f);
+	float sin_theta = std::sqrt(1.f - cos_theta * cos_theta);
 
 	if ((refraction_ratio * sin_theta > 1.f) || reflectance(cos_theta, refraction_ratio) > random<float>())
-		out_ray.m_direction = glm::reflect(direction, hit_result.m_normal);
+		out_ray.set_direction(math::reflect(direction, hit_result.m_normal));
 	else
-		out_ray.m_direction = glm::refract(direction, hit_result.m_normal, refraction_ratio);
+		out_ray.set_direction(math::refract(direction, hit_result.m_normal, refraction_ratio));
 
 	out_ray.m_origin = hit_result.m_position;
 	return true;

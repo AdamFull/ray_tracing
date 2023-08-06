@@ -25,16 +25,7 @@ struct FCameraComponent
 
 	glm::uvec2 m_viewportExtent{ 0u };
 
-	std::vector<glm::vec3> m_vRayDirections{};
-
-	glm::vec3 get_ray(uint32_t x, uint32_t y)
-	{
-		glm::vec2 texcoord = { (static_cast<float>(x) + random<float>()) / static_cast<float>(m_viewportExtent.x), (static_cast<float>(y) + random<float>()) / static_cast<float>(m_viewportExtent.y) };
-		texcoord = texcoord * 2.f - 1.f;
-
-		glm::vec4 target = m_invProjection * glm::vec4(texcoord.x, texcoord.y, 1.f, 1.f);
-		return glm::vec3(m_invView * glm::vec4(glm::normalize(glm::vec3(target) / target.w), 0.f));
-	}
+	std::vector<math::vec3> m_vRayDirections{};
 
 	bool m_bWasMoved{ true };
 };

@@ -27,7 +27,6 @@ void CCameraSystem::update(CRayEngine* engine)
 void CCameraSystem::update_camera(entt::registry& registry, const glm::uvec2& extent, FCameraComponent* camera, FTransformComponent* transform)
 {
 	bool needToRecalculateRays{ false };
-	auto direction = glm::eulerAngles(transform->m_rotation);
 
 	camera->m_forward = glm::normalize(glm::rotate(transform->m_rotation, glm::vec3(0.f, 0.f, -1.f)));
 	camera->m_right = glm::normalize(glm::cross(camera->m_forward, glm::vec3{ 0.f, 1.f, 0.f }));
@@ -82,7 +81,8 @@ void CCameraSystem::recalculate_ray_directions(FCameraComponent* camera)
 			texcoord = texcoord * 2.f - 1.f;
 
 			glm::vec4 target = camera->m_invProjection * glm::vec4(texcoord.x, texcoord.y, 1.f, 1.f);
-			camera->m_vRayDirections[x + y * viewport_extent.x] = glm::vec3(camera->m_invView * glm::vec4(glm::normalize(glm::vec3(target) / target.w), 0.f));
+			auto dir = glm::vec3(camera->m_invView * glm::vec4(glm::normalize(glm::vec3(target) / target.w), 0.f));
+			camera->m_vRayDirections[x + y * viewport_extent.x] = math::vec3(dir.x, dir.y, dir.z);
 		}
 	}
 }

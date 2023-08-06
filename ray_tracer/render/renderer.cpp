@@ -1,24 +1,83 @@
 #include "renderer.h"
 #include "resources/resource_manager.h"
 
+#include "ecs/components/camera_component.h"
+
 #include "util.h"
 
-#include <numeric>
+math::vec3 ray_color(const FRay& ray)
+{
+	auto direction = math::normalize(ray.m_direction);
+	auto t = 0.5f * (direction.y + 1.0f);
+	//return math::vec3(math::vec3(1.f, 1.f, 1.f) * (1.f - t) + math::vec3(0.5f, 0.7f, 1.f) * t); // day
+	return math::vec3(math::vec3(0.01f, 0.01f, 0.03f) * (1.f - t) + math::vec3(0.0f, 0.0f, 0.0f) * t); // night
+}
 
 CRenderCore::CRenderCore(CResourceManager* resource_manager)
 {
 	m_pResourceManager = resource_manager;
 }
 
-void CRenderCore::create(const uint32_t width, const uint32_t heigth)
+void CRenderCore::create(uint32_t width, uint32_t heigth, uint32_t samples)
 {
 	// Creating a framebuffer
 	m_pFramebuffer = std::make_unique<CFramebuffer>(m_pResourceManager);
 	m_pFramebuffer->create(width, heigth);
-	m_pFramebuffer->set_sample_count(100);
+	m_pFramebuffer->set_sample_count(samples);
 
 	m_pixelIterator.resize(width * heigth);
 	std::iota(m_pixelIterator.begin(), m_pixelIterator.end(), 0u);
+}
+
+void CRenderCore::trace_ray(CScene* scene, FCameraComponent* camera, const math::vec3& origin)
+{
+	std::for_each(std::execution::par_unseq, m_pixelIterator.begin(), m_pixelIterator.end(),
+		[this, scene, camera, &origin] (uint32_t index)
+		{ 
+			trace_ray(scene, camera, origin, index);
+		});
+
+	m_pFramebuffer->present();
+}
+
+void CRenderCore::trace_ray(CScene* scene, FCameraComponent* camera, const math::vec3& origin, uint32_t ray_index)
+{
+	auto& viewport_extent = camera->m_viewportExtent;
+
+	auto x = ray_index % viewport_extent.x;
+	auto y = ray_index / viewport_extent.x;
+
+	auto& ray_direction = camera->m_vRayDirections[ray_index];
+
+	for (uint32_t sample = 0u; sample < m_pFramebuffer->get_sample_count(); ++sample)
+	{
+		FRay ray{};
+		ray.m_origin = origin;
+		ray.set_direction(ray_direction);
+		m_pFramebuffer->add_pixel(x, y, math::to_vec4(hit_pixel(scene, ray, 100), 1.f));
+	}
+}
+
+math::vec3 CRenderCore::hit_pixel(CScene* scene, FRay ray, int32_t bounces)
+{
+	if (bounces <= 0)
+		return math::vec3(0.f);
+
+	FHitResult hit_result{};
+	if (!scene->trace_ray(ray, 0.001f, std::numeric_limits<float>::infinity(), hit_result))
+		return ray_color(ray);
+
+	auto& material = m_pResourceManager->get_material(hit_result.m_material_id);
+
+	float pdf{};
+	math::vec3 attenuation{};
+	math::vec3 emitted = material->emit(hit_result);
+
+	FRay scattered{};
+	if (!material->scatter(ray, hit_result, attenuation, scattered, pdf))
+		return emitted;
+
+	return emitted + attenuation * material->scatter_pdf(ray, hit_result, scattered) * hit_pixel(scene, scattered, bounces - 1) / pdf;
 }
 
 const std::unique_ptr<CFramebuffer>& CRenderCore::get_framebuffer() const
@@ -30,56 +89,3 @@ const std::vector<uint32_t>& CRenderCore::get_pixel_iterator() const
 {
 	return m_pixelIterator;
 }
-
-//void CRenderCore::render(const std::unique_ptr<Scene>& scene)
-//{
-//	auto dim = _framebuffer->get_extent();
-//
-//	_framebuffer->clear(glm::vec4(0.f));
-//
-//	std::for_each(std::execution::par, _image_iter.begin(), _image_iter.end(),
-//		[this, &scene, &dim](uint32_t index)
-//		{
-//			auto x = index % dim.x;
-//			auto y = index / dim.x;
-//	
-//			for (uint32_t sample = 0u; sample < _framebuffer->get_sample_count(); ++sample)
-//			{
-//				float u = (static_cast<float>(x) + random<float>()) / static_cast<float>(dim.x - 1u);
-//				float v = (static_cast<float>(y) + random<float>()) / static_cast<float>(dim.y - 1u);
-//	
-//				auto ray = _camera->get_ray(u, v);
-//				_framebuffer->add_pixel(x, y, glm::vec4(trace_ray(ray, scene, 50), 1.f));
-//			}
-//		});
-//
-//	_framebuffer->present();
-//}
-//
-//glm::vec3 CRenderCore::trace_ray(Ray ray, const std::unique_ptr<Scene>& scene, int32_t bounces)
-//{
-//	glm::vec3 out_color{ 1.f };
-//
-//	for (uint32_t b = 0u; b < bounces; ++b)
-//	{
-//		HitResult hit_result{};
-//		if (!scene->trace_ray(ray, 0.0005f, std::numeric_limits<float>::infinity(), hit_result))
-//		{
-//			out_color *= ray_color(ray);
-//			break;
-//		}
-//
-//		auto& material = scene->get_material(hit_result._material_id);
-//		if (!material)
-//			continue;
-//
-//		material->scatter(ray, hit_result, out_color, ray);
-//	}
-//	
-//	return out_color;
-//}
-//
-//void CRenderCore::render_loop()
-//{
-//
-//}

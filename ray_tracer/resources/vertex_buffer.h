@@ -15,30 +15,30 @@ struct cube_template : mesh_template
 		vertices =
 		{
 			//-----|---------position----------|------------normal-----------|-------texcoord-------|
-			FVertex(glm::vec3(-1.f, -1.f,  1.f), glm::vec3( 0.f, -1.f,  0.f), glm::vec2( 1.f,  1.f)),
-			FVertex(glm::vec3(-1.f, -1.f, -1.f), glm::vec3( 0.f, -1.f,  0.f), glm::vec2( 1.f,  0.f)),
-			FVertex(glm::vec3( 1.f, -1.f, -1.f), glm::vec3( 0.f, -1.f,  0.f), glm::vec2( 0.f,  0.f)),
-			FVertex(glm::vec3( 1.f, -1.f,  1.f), glm::vec3( 0.f, -1.f,  0.f), glm::vec2( 0.f,  1.f)),
-			FVertex(glm::vec3(-1.f,  1.f,  1.f), glm::vec3( 0.f,  1.f,  0.f), glm::vec2( 0.f,  1.f)),
-			FVertex(glm::vec3( 1.f,  1.f,  1.f), glm::vec3( 0.f,  1.f,  0.f), glm::vec2( 1.f,  1.f)),
-			FVertex(glm::vec3( 1.f,  1.f, -1.f), glm::vec3( 0.f,  1.f,  0.f), glm::vec2( 1.f,  0.f)),
-			FVertex(glm::vec3(-1.f,  1.f, -1.f), glm::vec3( 0.f,  1.f,  0.f), glm::vec2( 0.f,  0.f)),
-			FVertex(glm::vec3(-1.f, -1.f,  1.f), glm::vec3( 0.f, -1.f,  0.f), glm::vec2( 0.f,  1.f)),
-			FVertex(glm::vec3( 1.f, -1.f,  1.f), glm::vec3( 0.f, -1.f,  0.f), glm::vec2( 1.f,  1.f)),
-			FVertex(glm::vec3( 1.f,  1.f,  1.f), glm::vec3( 0.f,  1.f,  0.f), glm::vec2( 1.f,  0.f)),
-			FVertex(glm::vec3(-1.f,  1.f,  1.f), glm::vec3( 0.f,  1.f,  0.f), glm::vec2( 0.f,  0.f)),
-			FVertex(glm::vec3( 1.f, -1.f,  1.f), glm::vec3( 0.f, -1.f,  0.f), glm::vec2( 0.f,  1.f)),
-			FVertex(glm::vec3( 1.f, -1.f, -1.f), glm::vec3( 0.f, -1.f,  0.f), glm::vec2( 1.f,  1.f)),
-			FVertex(glm::vec3( 1.f,  1.f, -1.f), glm::vec3( 0.f,  1.f,  0.f), glm::vec2( 1.f,  0.f)),
-			FVertex(glm::vec3( 1.f,  1.f,  1.f), glm::vec3( 0.f,  1.f,  0.f), glm::vec2( 0.f,  0.f)),
-			FVertex(glm::vec3( 1.f, -1.f, -1.f), glm::vec3( 0.f, -1.f,  0.f), glm::vec2( 0.f,  1.f)),
-			FVertex(glm::vec3(-1.f, -1.f, -1.f), glm::vec3( 0.f, -1.f,  0.f), glm::vec2( 1.f,  1.f)),
-			FVertex(glm::vec3(-1.f,  1.f, -1.f), glm::vec3( 0.f,  1.f,  0.f), glm::vec2( 1.f,  0.f)),
-			FVertex(glm::vec3( 1.f,  1.f, -1.f), glm::vec3( 0.f,  1.f,  0.f), glm::vec2( 0.f,  0.f)),
-			FVertex(glm::vec3(-1.f, -1.f, -1.f), glm::vec3( 0.f, -1.f,  0.f), glm::vec2( 0.f,  1.f)),
-			FVertex(glm::vec3(-1.f, -1.f,  1.f), glm::vec3( 0.f, -1.f,  0.f), glm::vec2( 1.f,  1.f)),
-			FVertex(glm::vec3(-1.f,  1.f,  1.f), glm::vec3( 0.f,  1.f,  0.f), glm::vec2( 1.f,  0.f)),
-			FVertex(glm::vec3(-1.f,  1.f, -1.f), glm::vec3( 0.f,  1.f,  0.f), glm::vec2( 0.f,  0.f)),
+			FVertex(math::vec3(-1.f, -1.f,  1.f), math::vec3( 0.f, -1.f,  0.f), math::vec2( 1.f,  1.f)),
+			FVertex(math::vec3(-1.f, -1.f, -1.f), math::vec3( 0.f, -1.f,  0.f), math::vec2( 1.f,  0.f)),
+			FVertex(math::vec3( 1.f, -1.f, -1.f), math::vec3( 0.f, -1.f,  0.f), math::vec2( 0.f,  0.f)),
+			FVertex(math::vec3( 1.f, -1.f,  1.f), math::vec3( 0.f, -1.f,  0.f), math::vec2( 0.f,  1.f)),
+			FVertex(math::vec3(-1.f,  1.f,  1.f), math::vec3( 0.f,  1.f,  0.f), math::vec2( 0.f,  1.f)),
+			FVertex(math::vec3( 1.f,  1.f,  1.f), math::vec3( 0.f,  1.f,  0.f), math::vec2( 1.f,  1.f)),
+			FVertex(math::vec3( 1.f,  1.f, -1.f), math::vec3( 0.f,  1.f,  0.f), math::vec2( 1.f,  0.f)),
+			FVertex(math::vec3(-1.f,  1.f, -1.f), math::vec3( 0.f,  1.f,  0.f), math::vec2( 0.f,  0.f)),
+			FVertex(math::vec3(-1.f, -1.f,  1.f), math::vec3( 0.f, -1.f,  0.f), math::vec2( 0.f,  1.f)),
+			FVertex(math::vec3( 1.f, -1.f,  1.f), math::vec3( 0.f, -1.f,  0.f), math::vec2( 1.f,  1.f)),
+			FVertex(math::vec3( 1.f,  1.f,  1.f), math::vec3( 0.f,  1.f,  0.f), math::vec2( 1.f,  0.f)),
+			FVertex(math::vec3(-1.f,  1.f,  1.f), math::vec3( 0.f,  1.f,  0.f), math::vec2( 0.f,  0.f)),
+			FVertex(math::vec3( 1.f, -1.f,  1.f), math::vec3( 0.f, -1.f,  0.f), math::vec2( 0.f,  1.f)),
+			FVertex(math::vec3( 1.f, -1.f, -1.f), math::vec3( 0.f, -1.f,  0.f), math::vec2( 1.f,  1.f)),
+			FVertex(math::vec3( 1.f,  1.f, -1.f), math::vec3( 0.f,  1.f,  0.f), math::vec2( 1.f,  0.f)),
+			FVertex(math::vec3( 1.f,  1.f,  1.f), math::vec3( 0.f,  1.f,  0.f), math::vec2( 0.f,  0.f)),
+			FVertex(math::vec3( 1.f, -1.f, -1.f), math::vec3( 0.f, -1.f,  0.f), math::vec2( 0.f,  1.f)),
+			FVertex(math::vec3(-1.f, -1.f, -1.f), math::vec3( 0.f, -1.f,  0.f), math::vec2( 1.f,  1.f)),
+			FVertex(math::vec3(-1.f,  1.f, -1.f), math::vec3( 0.f,  1.f,  0.f), math::vec2( 1.f,  0.f)),
+			FVertex(math::vec3( 1.f,  1.f, -1.f), math::vec3( 0.f,  1.f,  0.f), math::vec2( 0.f,  0.f)),
+			FVertex(math::vec3(-1.f, -1.f, -1.f), math::vec3( 0.f, -1.f,  0.f), math::vec2( 0.f,  1.f)),
+			FVertex(math::vec3(-1.f, -1.f,  1.f), math::vec3( 0.f, -1.f,  0.f), math::vec2( 1.f,  1.f)),
+			FVertex(math::vec3(-1.f,  1.f,  1.f), math::vec3( 0.f,  1.f,  0.f), math::vec2( 1.f,  0.f)),
+			FVertex(math::vec3(-1.f,  1.f, -1.f), math::vec3( 0.f,  1.f,  0.f), math::vec2( 0.f,  0.f)),
 
 		};
 
@@ -61,10 +61,10 @@ struct quad_template : mesh_template
 		vertices =
 		{
 			//------|---------position----------|-----------normal----------|-------texcoord-------|
-			FVertex(glm::vec3(-1.f,  1.f,  0.f), glm::vec3( 0.f, 1.f,  0.f), glm::vec2( 0.f,  0.f)),
-			FVertex(glm::vec3( 1.f,  1.f,  0.f), glm::vec3( 0.f, 1.f,  0.f), glm::vec2( 1.f,  0.f)),
-			FVertex(glm::vec3(-1.f, -1.f,  0.f), glm::vec3( 0.f, 1.f,  0.f), glm::vec2( 0.f,  1.f)),
-			FVertex(glm::vec3( 1.f, -1.f,  0.f), glm::vec3( 0.f, 1.f,  0.f), glm::vec2( 1.f,  1.f))
+			FVertex(math::vec3(-1.f,  1.f,  0.f), math::vec3( 0.f, 1.f,  0.f), math::vec2( 0.f,  0.f)),
+			FVertex(math::vec3( 1.f,  1.f,  0.f), math::vec3( 0.f, 1.f,  0.f), math::vec2( 1.f,  0.f)),
+			FVertex(math::vec3(-1.f, -1.f,  0.f), math::vec3( 0.f, 1.f,  0.f), math::vec2( 0.f,  1.f)),
+			FVertex(math::vec3( 1.f, -1.f,  0.f), math::vec3( 0.f, 1.f,  0.f), math::vec2( 1.f,  1.f))
 		};
 
 		indices = { 0u, 1u, 3u, 0u, 3u, 2u };

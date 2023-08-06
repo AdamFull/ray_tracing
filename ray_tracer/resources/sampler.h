@@ -26,10 +26,10 @@ public:
 	CSampler(CResourceManager* resource_manager);
 	void create(EFilterMode filterMin, EFilterMode filterMag, EWrapMode wrapS, EWrapMode wrapT);
 
-	glm::vec4 sample(resource_id_t image_id, const glm::vec2& uv);
+	math::vec4 sample(resource_id_t image_id, const math::vec2& uv);
 protected:
-	glm::vec4 nearest_interpolation(CImage* image, uint32_t x, uint32_t y);
-	glm::vec4 bilinear_interpolation(CImage* image, uint32_t x, uint32_t y);
+	math::vec4 nearest_interpolation(CImage* image, uint32_t x, uint32_t y);
+	math::vec4 bilinear_interpolation(CImage* image, uint32_t x, uint32_t y);
 private:
 	CResourceManager* m_pResourceManager{ nullptr };
 	EFilterMode m_minFilter{};
