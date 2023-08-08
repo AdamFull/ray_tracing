@@ -53,8 +53,8 @@ void CRenderCore::trace_ray(CScene* scene, FCameraComponent* camera, const math:
 	{
 		FRay ray{};
 		ray.m_origin = origin;
-		ray.set_direction(ray_direction);
-		m_pFramebuffer->add_pixel(x, y, math::to_vec4(hit_pixel(scene, ray, 100), 1.f));
+		ray.set_direction(ray_direction + random_vec3(-0.0001f, 0.0001f));
+		m_pFramebuffer->add_pixel(x, y, math::to_vec4(hit_pixel(scene, ray, 50), 1.f));
 	}
 }
 
@@ -77,7 +77,8 @@ math::vec3 CRenderCore::hit_pixel(CScene* scene, FRay ray, int32_t bounces)
 	if (!material->scatter(ray, hit_result, attenuation, scattered, pdf))
 		return emitted;
 
-	return emitted + attenuation * material->scatter_pdf(ray, hit_result, scattered) * hit_pixel(scene, scattered, bounces - 1) / pdf;
+	//return emitted + attenuation * hit_pixel(scene, scattered, bounces - 1);
+	return emitted + attenuation * hit_pixel(scene, scattered, bounces - 1);
 }
 
 const std::unique_ptr<CFramebuffer>& CRenderCore::get_framebuffer() const

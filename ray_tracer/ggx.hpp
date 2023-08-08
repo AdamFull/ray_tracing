@@ -21,6 +21,11 @@ inline float G_SchlicksmithGGX(float dotNL, float dotNV, float roughness)
 }
 
 // Fresnel function
+inline math::vec3 F_Schlick(float cosTheta, float f90, math::vec3 F0)
+{
+	return F0 + (f90 - F0) * pow(1.0f - cosTheta, 5.0f);
+}
+
 inline math::vec3 F_SchlickR(float cosTheta, math::vec3 F0, float roughness)
 {
 	return F0 + (math::max(math::vec3(1.0f - roughness), F0) - F0) * std::pow(1.0f - cosTheta, 5.0f);
@@ -89,6 +94,41 @@ inline math::vec3 evaluateCookTorrenceSpecularBRDF(float D, float G, math::vec3 
 
 	return math::vec3((D * G * F) / (4.f * cosThetaI * cosThetaO));
 
+}
+
+inline math::vec3 specularContribution(const math::vec3& diffuse, const math::vec3& L, const math::vec3& V, const math::vec3& N, const math::vec3& F0, float metallic, float roughness)
+{
+	math::vec3 H = math::normalize(V + L);
+	float dotNH = math::clamp(math::dot(N, H), 0.f, 1.f);
+	float dotNV = math::clamp(math::dot(N, V), 0.f, 1.f);
+	float dotNL = math::clamp(math::dot(N, L), 0.f, 1.f);
+
+	math::vec3 out_color{ 0.f };
+
+	if (dotNL > 0.f)
+	{
+		// D = Normal distribution (Distribution of the microfacets)
+		float D = D_GGX(dotNH, roughness);
+		// G = Geometric shadowing term (Microfacets shadowing)
+		float G = G_SchlicksmithGGX(dotNL, dotNV, roughness);
+		// F = Fresnel factor (Reflectance depending on angle of incidence)
+		math::vec3 F = F_Schlick(dotNV, 1.0, F0);
+		math::vec3 spec = D * F * G / (4.0 * dotNL * dotNV + 0.001);
+		math::vec3 kD = (math::vec3(1.0f) - F) * (1.0f - metallic);
+		out_color += (kD * diffuse / std::numbers::pi_v<float> + spec) * dotNL;
+	}
+
+	return out_color;
+}
+
+inline float calculate_pdf(const math::vec3& L, const math::vec3& V, const math::vec3& N, float roughness)
+{
+	math::vec3 H = math::normalize(V + L);
+
+	float dotNH = math::clamp(math::dot(N, H), 0.f, 1.f);
+	float dotVH = math::clamp(math::dot(V, H), 0.f, 1.f);
+
+	return D_GGX(dotNH, roughness) * dotNH / (4.0f * dotVH);
 }
 
 inline math::vec2 compute_brdf(float NoV, float roughness, uint32_t samples)

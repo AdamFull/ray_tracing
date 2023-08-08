@@ -117,24 +117,23 @@ bool CMetalRoughnessMaterial::scatter(const FRay& in_ray, const FHitResult& hit_
 	if(m_textures.count(ETextureType::eAlbedo))
 		albedo *= math::to_vec3(sample_texture(ETextureType::eAlbedo, hit_result.m_texcoord));
 
-	// Calculate pdf
+	math::vec3 F0{ 0.04f };
+	F0 = math::mix(F0, albedo, metallic);
+
 	math::vec3 V = in_ray.m_direction * -1.f;
-	math::vec3 h = math::normalize(out_ray.m_direction + V);
 
-	float dotNH = math::dot(ts_normal, h);
-	float dotVH = math::dot(V, h);
+	// Calculate pdf
+	pdf = calculate_pdf(out_ray.m_direction, V, ts_normal, roughness);
 
-	pdf = D_GGX(dotNH, roughness) * dotNH / (4.0f * dotVH);
+	// Calculate specular contribution
+	math::vec3 Lo = specularContribution(albedo, out_ray.m_direction, V, ts_normal, F0, metallic, roughness);
 
 	// calculate the BRDF using BRDF LUT
-	float cosThetaI = math::dot(out_ray.m_direction, ts_normal);
+	float cosThetaI = math::max(math::dot(ts_normal, V), 0.f);
 	math::vec2 brdf_lut_uv = math::vec2(cosThetaI, roughness);
 	math::vec2 brdf{ 0.f };
 	if (m_textures.count(ETextureType::eBRDFLut))
 		brdf = math::to_vec2(sample_texture(ETextureType::eBRDFLut, brdf_lut_uv));
-	
-	math::vec3 F0{ 0.04f };
-	F0 = math::mix(F0, albedo, metallic);
 	
 	math::vec3 F = F_SchlickR(cosThetaI, F0, roughness);
 	
@@ -142,7 +141,8 @@ bool CMetalRoughnessMaterial::scatter(const FRay& in_ray, const FHitResult& hit_
 	
 	math::vec3 kD = 1.f - F;
 	kD *= 1.f - metallic;
-	color = kD * albedo + specular;
+	math::vec3 ambient = kD * albedo + specular;
+	color = ambient + Lo;
 
 	return cosThetaI > 0.f;
 }
