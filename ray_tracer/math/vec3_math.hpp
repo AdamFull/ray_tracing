@@ -8,8 +8,8 @@ namespace math
 	template<>
 	inline vec3 min(const vec3& lhs, const vec3& rhs) noexcept
 	{
-		vec3 res{};
-#if defined(USE_INTRINSICS)
+		vec3 res{ 0.f };
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_OPERATIONS)
 		res.vec128 = _mm_min_ps(lhs.vec128, rhs.vec128);
 #else
 		res.x = std::min(lhs.x, rhs.x);
@@ -22,13 +22,13 @@ namespace math
 	template<>
 	inline vec3 max(const vec3& lhs, const vec3& rhs) noexcept
 	{
-		vec3 res{};
-#if defined(USE_INTRINSICS)
+		vec3 res{ 0.f };
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_OPERATIONS)
 		res.vec128 = _mm_max_ps(lhs.vec128, rhs.vec128);
 #else
-		res.x = std::max(lhs.x, rhs.x);
-		res.y = std::max(lhs.y, rhs.y);
-		res.z = std::max(lhs.z, rhs.z);
+		res.x = lhs.x > rhs.x ? lhs.x : rhs.x;
+		res.y = lhs.y > rhs.y ? lhs.y : rhs.y;
+		res.z = lhs.z > rhs.z ? lhs.z : rhs.z;
 #endif
 		return res;
 	}
@@ -37,7 +37,7 @@ namespace math
 	inline vec3 sqrt(vec3& vec)
 	{
 		vec3 res{};
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_OPERATIONS)
 		res.vec128 = _mm_sqrt_ps(vec.vec128);
 #else
 		res.x = std::sqrt(vec.x);
@@ -49,7 +49,7 @@ namespace math
 
 	inline float dot(const vec3& lhs, const vec3& rhs)
 	{
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_OPERATIONS)
 		return _mm_cvtss_f32(_vec128_dot_product(lhs.vec128, rhs.vec128));
 #else
 		return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
@@ -63,7 +63,7 @@ namespace math
 
 	inline float length(const vec3& vec) noexcept
 	{
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_OPERATIONS)
 		return _mm_cvtss_f32(math::_vec128_length(vec.vec128));
 #else
 		return std::sqrt(length2(vec));
@@ -73,7 +73,7 @@ namespace math
 	inline vec3 normalize(const vec3& vec)
 	{
 		vec3 res{};
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_OPERATIONS)
 		res.vec128 = math::_vec128_normalize(vec.vec128);
 #else
 		auto len = length(vec);
@@ -84,14 +84,14 @@ namespace math
 
 	inline vec3 apply_otb(const vec3& t, const vec3& b, const vec3& n, const vec3& v)
 	{
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_OPERATIONS)
 		__m128 x = _mm_mul_ps(_mm_shuffle_ps(v.vec128, v.vec128, _MM_SHUFFLE(0, 0, 0, 0)), t.vec128);
 		__m128 y = _mm_mul_ps(_mm_shuffle_ps(v.vec128, v.vec128, _MM_SHUFFLE(1, 1, 1, 1)), b.vec128);
 		__m128 z = _mm_mul_ps(_mm_shuffle_ps(v.vec128, v.vec128, _MM_SHUFFLE(2, 2, 2, 2)), n.vec128);
 #endif
 
 		vec3 res{};
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_OPERATIONS)
 		res.vec128 = _mm_add_ps(x, _mm_add_ps(y, z));
 #else
 		res = v.x * t + v.y * b + v.z * n;
@@ -129,7 +129,7 @@ namespace math
 	inline vec3 cross(const vec3& lhs, const vec3& rhs)
 	{
 		vec3 res{};
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_OPERATIONS)
 		res.vec128 = _vec128_cross(lhs.vec128, rhs.vec128);
 #else
 		res.x = lhs.y * rhs.z - lhs.z * rhs.y;
@@ -145,9 +145,9 @@ namespace math
 	}
 
 
-	inline bool ray_aabb_intersect(const vec3& ray_origin, const vec3& inv_ray_dir, const vec3& bmin, const vec3& bmax)
+	inline float ray_aabb_intersect(const vec3& ray_origin, const vec3& inv_ray_dir, const vec3& bmin, const vec3& bmax, float distance)
 	{
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_INTERSECTION) && 0
 		static __m128 mask = _mm_cmpeq_ps(_mm_setzero_ps(), _mm_set_ps(1.f, 0.f, 0.f, 0.f));
 
 		__m128 t1 = _mm_mul_ps(_mm_sub_ps(_mm_and_ps(bmin.vec128, mask), ray_origin.vec128), inv_ray_dir.vec128);
@@ -167,12 +167,17 @@ namespace math
 		tmin = max(tmin, min(tz1, tz2)), tmax = min(tmax, max(tz1, tz2));
 #endif
 
-		return tmin <= tmax && tmax >= 0.f;
+		if (tmax >= tmin && tmin < distance && tmax > 0.f)
+			return tmin;
+
+		return std::numeric_limits<float>::max();
+
+		//return tmin <= tmax && tmax >= 0.f;
 	}
 
 	inline bool ray_triangle_intersect(const vec3& r0, const vec3& rd, const vec3& v0, const vec3& v1, const vec3& v2, float& distance, vec3& barycentric)
 	{
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_INTERSECTION)
 		__m128 e0 = _mm_sub_ps(v1.vec128, v0.vec128);
 		__m128 e1 = _mm_sub_ps(v2.vec128, v0.vec128);
 
@@ -233,17 +238,17 @@ namespace math
 
 	inline vec3 interpolate(const vec3& v0, const vec3& v1, const vec3& v2, const vec3& interpolator)
 	{
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_OPERATIONS)
 		__m128 interpolator_x = _mm_shuffle_ps(interpolator.vec128, interpolator.vec128, _MM_SHUFFLE(0, 0, 0, 0));
 		__m128 interpolator_y = _mm_shuffle_ps(interpolator.vec128, interpolator.vec128, _MM_SHUFFLE(1, 1, 1, 1));
 		__m128 interpolator_z = _mm_shuffle_ps(interpolator.vec128, interpolator.vec128, _MM_SHUFFLE(2, 2, 2, 2));
 #endif
 
 		vec3 res{};
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_OPERATIONS)
 		res.vec128 = _mm_add_ps(_mm_mul_ps(interpolator_x, v0.vec128), _mm_add_ps(_mm_mul_ps(interpolator_y, v1.vec128), _mm_mul_ps(interpolator_z, v2.vec128)));
 #else
-		res = interpolator.x* v0 + interpolator.y * v1 + interpolator.z * v2;
+		res = interpolator.x * v0 + interpolator.y * v1 + interpolator.z * v2;
 #endif
 		return res;
 	}

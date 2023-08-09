@@ -9,7 +9,7 @@ namespace math
 	inline vec4 min(const vec4& lhs, const vec4& rhs) noexcept
 	{
 		vec4 res{};
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_OPERATIONS)
 		res.vec128 = _mm_min_ps(lhs.vec128, rhs.vec128);
 #else
 		res.x = std::min(lhs.x, rhs.x);
@@ -24,7 +24,7 @@ namespace math
 	inline vec4 max(const vec4& lhs, const vec4& rhs) noexcept
 	{
 		vec4 res{};
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_OPERATIONS)
 		res.vec128 = _mm_max_ps(lhs.vec128, rhs.vec128);
 #else
 		res.x = std::max(lhs.x, rhs.x);
@@ -39,7 +39,7 @@ namespace math
 	inline vec4 sqrt(vec4& vec)
 	{
 		vec4 res{};
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_OPERATIONS)
 		res.vec128 = _mm_sqrt_ps(vec.vec128);
 #else
 		res.x = std::sqrt(vec.x);
@@ -53,7 +53,7 @@ namespace math
 
 	inline float dot(const vec4& lhs, const vec4& rhs)
 	{
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_OPERATIONS)
 		return _mm_cvtss_f32(_vec128_dot_product(lhs.vec128, rhs.vec128));
 #else
 		return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z + lhs.w * rhs.w;
@@ -67,7 +67,7 @@ namespace math
 
 	inline float length(const vec4& vec) noexcept
 	{
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_OPERATIONS)
 		return _mm_cvtss_f32(_vec128_length(vec.vec128));
 #else
 		return std::sqrt(length2(vec));
@@ -77,7 +77,7 @@ namespace math
 	inline vec4 normalize(const vec4& vec)
 	{
 		vec4 res{};
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_OPERATIONS)
 		res.vec128 = _vec128_normalize(vec.vec128);
 #else
 		auto len = length(vec);

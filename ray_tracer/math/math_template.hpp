@@ -38,19 +38,4 @@ namespace math
 		if (_x > _max) return _max;
 		return _x;
 	}
-
-	constexpr inline bool compare_float(const float& lhs, const float& rhs) noexcept
-	{
-		return abs(lhs - rhs) <= std::numeric_limits<float>::epsilon();
-	}
-
-	constexpr inline bool greater_equal_float(const float& lhs, const float& rhs)
-	{
-		return (lhs > rhs) || compare_float(lhs, rhs);
-	}
-
-	constexpr inline bool less_equal_float(const float& lhs, const float& rhs)
-	{
-		return (lhs < rhs) || compare_float(lhs, rhs);
-	}
 }

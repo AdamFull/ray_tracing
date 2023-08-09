@@ -84,7 +84,7 @@ namespace math
 	inline vec2 operator+(const vec2& lhs, const vec2& rhs) noexcept
 	{
 		vec2 res{};
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
 		res.vec128 = _mm_add_ps(lhs.vec128, rhs.vec128);
 #else
 		res.x = lhs.x + rhs.x;
@@ -96,7 +96,7 @@ namespace math
 	inline vec2 operator-(const vec2& lhs, const vec2& rhs) noexcept
 	{
 		vec2 res{};
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
 		res.vec128 = _mm_sub_ps(lhs.vec128, rhs.vec128);
 #else
 		res.x = lhs.x - rhs.x;
@@ -108,7 +108,7 @@ namespace math
 	inline vec2 operator*(const vec2& lhs, const vec2& rhs) noexcept
 	{
 		vec2 res{};
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
 		res.vec128 = _mm_mul_ps(lhs.vec128, rhs.vec128);
 #else
 		res.x = lhs.x * rhs.x;
@@ -120,7 +120,7 @@ namespace math
 	inline vec2 operator/(const vec2& lhs, const vec2& rhs)
 	{
 		vec2 res{};
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
 		res.vec128 = _mm_div_ps(lhs.vec128, rhs.vec128);
 #else
 		res.x = lhs.x / rhs.x;
@@ -133,7 +133,7 @@ namespace math
 	inline vec2 operator+(const vec2& lhs, const float& rhs) noexcept
 	{
 		vec2 res{};
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
 		res.vec128 = _mm_add_ps(lhs.vec128, _mm_set_ps1(rhs));
 #else
 		res.x = lhs.x + rhs;
@@ -145,7 +145,7 @@ namespace math
 	inline vec2 operator-(const vec2& lhs, const float& rhs) noexcept
 	{
 		vec2 res{};
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
 		res.vec128 = _mm_sub_ps(lhs.vec128, _mm_set_ps1(rhs));
 #else
 		res.x = lhs.x - rhs;
@@ -157,7 +157,7 @@ namespace math
 	inline vec2 operator*(const vec2& lhs, const float& rhs) noexcept
 	{
 		vec2 res{};
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
 		res.vec128 = _mm_mul_ps(lhs.vec128, _mm_set_ps1(rhs));
 #else
 		res.x = lhs.x * rhs;
@@ -169,7 +169,7 @@ namespace math
 	inline vec2 operator/(const vec2& lhs, const float& rhs)
 	{
 		vec2 res{};
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
 		res.vec128 = _mm_div_ps(lhs.vec128, _mm_set_ps1(rhs));
 #else
 		res.x = lhs.x / rhs;
@@ -182,7 +182,7 @@ namespace math
 	inline vec2 operator+(const float& lhs, const vec2& rhs) noexcept
 	{
 		vec2 res{};
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
 		res.vec128 = _mm_add_ps(_mm_set_ps1(lhs), rhs.vec128);
 #else
 		res.x = lhs + rhs.x;
@@ -194,7 +194,7 @@ namespace math
 	inline vec2 operator-(const float& lhs, const vec2& rhs) noexcept
 	{
 		vec2 res{};
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
 		res.vec128 = _mm_sub_ps(_mm_set_ps1(lhs), rhs.vec128);
 #else
 		res.x = lhs - rhs.x;
@@ -206,7 +206,7 @@ namespace math
 	inline vec2 operator*(const float& lhs, const vec2& rhs) noexcept
 	{
 		vec2 res{};
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
 		res.vec128 = _mm_mul_ps(_mm_set_ps1(lhs), rhs.vec128);
 #else
 		res.x = lhs * rhs.x;
@@ -218,7 +218,7 @@ namespace math
 	inline vec2 operator/(const float& lhs, const vec2& rhs)
 	{
 		vec2 res{};
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
 		res.vec128 = _mm_div_ps(_mm_set_ps1(lhs), rhs.vec128);
 #else
 		res.x = lhs / rhs.x;
@@ -230,7 +230,7 @@ namespace math
 	// operators
 	inline vec2& vec2::operator+=(const vec2& other) noexcept
 	{
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
 		vec128 = _mm_add_ps(vec128, other.vec128);
 #else
 		x += other.x;
@@ -241,7 +241,7 @@ namespace math
 
 	inline vec2& vec2::operator-=(const vec2& other) noexcept
 	{
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
 		vec128 = _mm_sub_ps(vec128, other.vec128);
 #else
 		x -= other.x;
@@ -252,7 +252,7 @@ namespace math
 
 	inline vec2& vec2::operator*=(const vec2& other) noexcept
 	{
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
 		vec128 = _mm_mul_ps(vec128, other.vec128);
 #else
 		x *= other.x;
@@ -263,7 +263,7 @@ namespace math
 
 	inline vec2& vec2::operator/=(const vec2& other)
 	{
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
 		vec128 = _mm_div_ps(vec128, other.vec128);
 #else
 		x /= other.x;
@@ -274,7 +274,7 @@ namespace math
 
 	inline vec2& vec2::operator+=(const float& other) noexcept
 	{
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
 		vec128 = _mm_add_ps(vec128, _mm_set_ps1(other));
 #else
 		x += other;
@@ -285,7 +285,7 @@ namespace math
 
 	inline vec2& vec2::operator-=(const float& other) noexcept
 	{
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
 		vec128 = _mm_sub_ps(vec128, _mm_set_ps1(other));
 #else
 		x -= other;
@@ -296,7 +296,7 @@ namespace math
 
 	inline vec2& vec2::operator*=(const float& other) noexcept
 	{
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
 		vec128 = _mm_mul_ps(vec128, _mm_set_ps1(other));
 #else
 		x *= other;
@@ -307,7 +307,7 @@ namespace math
 
 	inline vec2& vec2::operator/=(const float& other)
 	{
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
 		vec128 = _mm_div_ps(vec128, _mm_set_ps1(other));
 #else
 		x /= other;
@@ -320,7 +320,7 @@ namespace math
 	{
 		static __m128 zero = _mm_setzero_ps();
 		vec2 res{};
-#if defined(USE_INTRINSICS)
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
 		res.vec128 = _mm_sub_ps(zero, vec128);
 #else
 		res.x *= -1.f;
