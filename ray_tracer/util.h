@@ -67,38 +67,3 @@ inline glm::vec3 random_cosine_direction()
 
 	return glm::vec3(x, y, z);
 }
-
-class COrthoNormalBasis
-{
-public:
-	COrthoNormalBasis() = default;
-
-	inline glm::vec3& operator[](size_t index)
-	{
-		return m_axis[index];
-	}
-
-	inline glm::vec3& u() { return m_axis[0ull]; }
-	inline glm::vec3& v() { return m_axis[1ull]; }
-	inline glm::vec3& w() { return m_axis[2ull]; }
-
-	inline glm::vec3 local(float a, float b, float c)
-	{
-		return a * u() + b * v() + c * w();
-	}
-
-	inline glm::vec3 local(const glm::vec3& a)
-	{
-		return a.x * u() + a.y * v() + a.z * w();
-	}
-
-	void build_from_w(const glm::vec3& n)
-	{
-		m_axis[2ull] = glm::normalize(n);
-		glm::vec3 a = (std::fabs(w().x) > 0.9) ? glm::vec3(0.f, 1.f, 0.f) : glm::vec3(1.f, 0.f, 0.f);
-		m_axis[1ull] = glm::normalize(glm::cross(w(), a));
-		m_axis[0ull] = glm::cross(w(), v());
-	}
-private:
-	glm::vec3 m_axis[3ull];
-};

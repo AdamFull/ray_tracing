@@ -62,28 +62,36 @@ inline glm::vec3 importanceSample_GGX(glm::vec2 Xi, float roughness, glm::vec3 n
 	float phi = 2.0f * std::numbers::pi_v<float> *Xi.x + random(normal.x, normal.z) * 0.1f;
 	float cosTheta = glm::sqrt((1.0f - Xi.y) / (1.0f + (alpha * alpha - 1.0f) * Xi.y));
 	float sinTheta = glm::sqrt(1.0f - cosTheta * cosTheta);
-	glm::vec3 H = glm::vec3(sinTheta * glm::cos(phi), sinTheta * glm::sin(phi), cosTheta);
+
+	// SSE version works better!
+#if defined(USE_INTRINSICS)
+	__m128 _normal = _mm_setr_ps(normal.x, normal.y, normal.z, 0.f);
 
 	// Tangent space
-	glm::vec3 up = abs(normal.z) < 0.999 ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
-	
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_GGX)
-	__m128 tangentX = glm::_vec128_normalize(glm::_vec128_cross(up.vec128, normal.vec128));
-	__m128 tangentY = glm::_vec128_normalize(glm::_vec128_cross(normal.vec128, tangentX));
+	__m128 _up = glm::abs(normal.z) < 0.999 ? _mm_setr_ps(0.f, 0.f, 1.f, 0.f) : _mm_setr_ps(1.f, 0.f, 0.f, 0.f);
 
-	glm::vec3 res{};
-	
-	__m128 resX = _mm_mul_ps(tangentX, _mm_shuffle_ps(H.vec128, H.vec128, _MM_SHUFFLE(0, 0, 0, 0)));
-	__m128 resY = _mm_mul_ps(tangentY, _mm_shuffle_ps(H.vec128, H.vec128, _MM_SHUFFLE(1, 1, 1, 1)));
-	__m128 resZ = _mm_mul_ps(normal.vec128, _mm_shuffle_ps(H.vec128, H.vec128, _MM_SHUFFLE(2, 2, 2, 2)));
+	__m128 _tangentX = math::_vec128_normalize(math::_vec128_cross(_up, _normal));
+	__m128 _tangentY = math::_vec128_normalize(math::_vec128_cross(_normal, _tangentX));
 
-	res.vec128 = glm::_vec128_normalize((_mm_add_ps(resX, _mm_add_ps(resY, resZ))));
+	__m128 _Hx = _mm_set_ps1(sinTheta * glm::cos(phi));
+	__m128 _Hy = _mm_set_ps1(sinTheta * glm::sin(phi));
+	__m128 _Hz = _mm_set_ps1(cosTheta);
 
-	return res;
+	__m128 _res = math::_vec128_normalize(_mm_add_ps(_mm_mul_ps(_tangentX, _Hx), _mm_add_ps(_mm_mul_ps(_tangentY, _Hy), _mm_mul_ps(_normal, _Hz))));
+
+	float _store[4ull];
+	_mm_storeu_ps(_store, _res);
+
+	return glm::vec3(_store[0ull], _store[1ull], _store[2ull]);
 #else
+	glm::vec3 H = glm::vec3(sinTheta * glm::cos(phi), sinTheta * glm::sin(phi), cosTheta);
+	
+	// Tangent space
+	glm::vec3 up = glm::abs(normal.z) < 0.999 ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
+	
 	glm::vec3 tangentX = glm::normalize(glm::cross(up, normal));
 	glm::vec3 tangentY = glm::normalize(glm::cross(normal, tangentX));
-
+	
 	// Convert to world Space
 	return glm::normalize(tangentX * H.x + tangentY * H.y + normal * H.z);
 #endif
@@ -98,10 +106,23 @@ inline glm::vec3 evaluateCookTorrenceSpecularBRDF(float D, float G, glm::vec3 F,
 
 inline glm::vec3 specularContribution(const glm::vec3& diffuse, const glm::vec3& L, const glm::vec3& V, const glm::vec3& N, const glm::vec3& F0, float metallic, float roughness)
 {
+#if defined(USE_INTRINSICS)
+	// Load variables
+	__m128 _L = _mm_setr_ps(L.x, L.y, L.z, 0.f);
+	__m128 _V = _mm_setr_ps(V.x, V.y, V.z, 0.f);
+	__m128 _N = _mm_setr_ps(N.x, N.y, N.z, 0.f);
+
+	__m128 _H = math::_vec128_normalize(_mm_add_ps(_V, _L));
+	float dotNH = glm::clamp(_mm_cvtss_f32(math::_vec128_dot_product(_N, _H)), 0.f, 1.f);
+	float dotNV = glm::clamp(_mm_cvtss_f32(math::_vec128_dot_product(_N, _V)), 0.f, 1.f);
+	float dotNL = glm::clamp(_mm_cvtss_f32(math::_vec128_dot_product(_N, _L)), 0.f, 1.f);
+#else
+
 	glm::vec3 H = glm::normalize(V + L);
 	float dotNH = glm::clamp(glm::dot(N, H), 0.f, 1.f);
 	float dotNV = glm::clamp(glm::dot(N, V), 0.f, 1.f);
 	float dotNL = glm::clamp(glm::dot(N, L), 0.f, 1.f);
+#endif
 
 	glm::vec3 out_color{ 0.f };
 
