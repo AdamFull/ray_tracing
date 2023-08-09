@@ -4,15 +4,16 @@
 
 #include "ggx.hpp"
 
-void CRayEngine::create(const std::filesystem::path& scenepath, uint32_t width, uint32_t heigth, uint32_t sample_count)
+void CRayEngine::create(const std::filesystem::path& scenepath, uint32_t width, uint32_t heigth, uint32_t sample_count, uint32_t bounce_count)
 {
 	m_pResourceManager = std::make_unique<CResourceManager>();
 
 	m_pRenderer = std::make_unique<CRenderCore>(m_pResourceManager.get());
-	m_pRenderer->create(width, heigth, sample_count);
+	m_pRenderer->create(width, heigth, sample_count, bounce_count);
 
 	m_pScene = std::make_unique<CScene>(m_pResourceManager.get());
 	m_pScene->create(scenepath, generate_brdf_lut(1024u, 1024u));
+	//m_pScene->create(scenepath, 0);
 
 	// Create systems
 	m_vSystems.emplace_back(std::make_unique<CHierarchySystem>());
@@ -58,10 +59,10 @@ resource_id_t CRayEngine::generate_brdf_lut(uint32_t size, uint32_t samples)
 		{
 			auto x = idx % size;
 			auto y = idx / size;
-			math::vec2 uv{ static_cast<float>(x) / static_cast<float>(size), static_cast<float>(y) / static_cast<float>(size) };
+			glm::vec2 uv{ static_cast<float>(x) / static_cast<float>(size), static_cast<float>(y) / static_cast<float>(size) };
 
 			auto lut = compute_brdf(uv.x, 1.f - uv.y, samples);
-			image->set_pixel(x, y, pack_color_u32(math::to_vec4(lut, 0.f, 1.f)));
+			image->set_pixel(x, y, pack_color_u32(glm::vec4(lut, 0.f, 1.f)));
 		});
 
 	auto sampler = std::make_unique<CSampler>(m_pResourceManager.get());

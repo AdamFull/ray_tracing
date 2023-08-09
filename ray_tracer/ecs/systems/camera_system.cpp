@@ -82,7 +82,7 @@ void CCameraSystem::recalculate_ray_directions(FCameraComponent* camera)
 
 			glm::vec4 target = camera->m_invProjection * glm::vec4(texcoord.x, texcoord.y, 1.f, 1.f);
 			auto dir = glm::vec3(camera->m_invView * glm::vec4(glm::normalize(glm::vec3(target) / target.w), 0.f));
-			camera->m_vRayDirections[x + y * viewport_extent.x] = math::vec3(dir.x, dir.y, dir.z);
+			camera->m_vRayDirections[x + y * viewport_extent.x] = glm::vec3(dir.x, dir.y, dir.z);
 		}
 	}
 }

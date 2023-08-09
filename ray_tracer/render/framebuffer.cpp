@@ -14,35 +14,30 @@ void CFramebuffer::create(uint32_t width, uint32_t heigth)
 
 	m_dimensions = glm::uvec2(width, heigth);
 
-	m_pColor = std::make_unique<math::vec4[]>(width * heigth);
+	m_pColor = std::make_unique<glm::vec4[]>(width * heigth);
 }
 
-void CFramebuffer::set_sample_count(uint32_t sample_count)
+void CFramebuffer::increment_sample_count()
 {
-	m_uSamples = sample_count ? sample_count : 1u;
+	m_uSamples++;
 }
 
-uint32_t CFramebuffer::get_sample_count() const
-{
-	return m_uSamples;
-}
-
-const math::vec4& CFramebuffer::get_pixel(uint32_t x, uint32_t y)
+const glm::vec4& CFramebuffer::get_pixel(uint32_t x, uint32_t y)
 {
 	return m_pColor[y * m_dimensions.x + x];
 }
 
-void CFramebuffer::set_pixel(uint32_t x, uint32_t y, const math::vec4& color)
+void CFramebuffer::set_pixel(uint32_t x, uint32_t y, const glm::vec4& color)
 {
 	m_pColor[y * m_dimensions.x + x] = color;
 }
 
-void CFramebuffer::add_pixel(uint32_t x, uint32_t y, const math::vec4& color)
+void CFramebuffer::add_pixel(uint32_t x, uint32_t y, const glm::vec4& color)
 {
 	m_pColor[y * m_dimensions.x + x] += color;
 }
 
-void CFramebuffer::clear(const math::vec4& clear_color)
+void CFramebuffer::clear(const glm::vec4& clear_color)
 {
 	auto size = m_dimensions.x * m_dimensions.y;
 	for (uint32_t idx = 0u; idx < size; ++idx)
@@ -59,7 +54,7 @@ void CFramebuffer::present()
 		{
 			auto sampling_factor = 1.f / static_cast<float>(m_uSamples);
 			auto color = get_pixel(x, y) * sampling_factor;
-			color = math::sqrt(color);
+			color = glm::sqrt(color);
 			image->set_pixel(x, m_dimensions.y - y - 1u, pack_color_u32(color));
 		}
 	}

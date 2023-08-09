@@ -2,6 +2,6 @@
 
 struct FDirectionalLightComponent
 {
-	math::vec3 m_color{};
+	glm::vec3 m_color{};
 	float m_intencity{ 1.f };
 };

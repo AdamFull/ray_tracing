@@ -33,6 +33,6 @@ void CRenderSystem::update(CRayEngine* engine)
 	if (!current_camera || !camera_transform)
 		return;
 
-	math::vec3 origin{ camera_transform->m_position.x, camera_transform->m_position.y, camera_transform->m_position.z };
+	glm::vec3 origin{ camera_transform->m_position.x, camera_transform->m_position.y, camera_transform->m_position.z };
 	renderer->trace_ray(scene.get(), current_camera, origin);
 }

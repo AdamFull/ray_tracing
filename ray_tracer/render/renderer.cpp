@@ -5,12 +5,12 @@
 
 #include "util.h"
 
-math::vec3 ray_color(const FRay& ray)
+glm::vec3 ray_color(const FRay& ray)
 {
-	auto direction = math::normalize(ray.m_direction);
+	auto direction = glm::normalize(ray.m_direction);
 	auto t = 0.5f * (direction.y + 1.0f);
-	//return math::vec3(math::vec3(1.f, 1.f, 1.f) * (1.f - t) + math::vec3(0.5f, 0.7f, 1.f) * t); // day
-	return math::vec3(math::vec3(0.01f, 0.01f, 0.03f) * (1.f - t) + math::vec3(0.0f, 0.0f, 0.0f) * t); // night
+	return glm::vec3(glm::vec3(1.f, 1.f, 1.f) * (1.f - t) + glm::vec3(0.5f, 0.7f, 1.f) * t); // day
+	//return glm::vec3(glm::vec3(0.01f, 0.01f, 0.03f) * (1.f - t) + glm::vec3(0.0f, 0.0f, 0.0f) * t); // night
 }
 
 CRenderCore::CRenderCore(CResourceManager* resource_manager)
@@ -18,29 +18,49 @@ CRenderCore::CRenderCore(CResourceManager* resource_manager)
 	m_pResourceManager = resource_manager;
 }
 
-void CRenderCore::create(uint32_t width, uint32_t heigth, uint32_t samples)
+void CRenderCore::create(uint32_t width, uint32_t heigth, uint32_t samples, uint32_t bounces)
 {
 	// Creating a framebuffer
 	m_pFramebuffer = std::make_unique<CFramebuffer>(m_pResourceManager);
 	m_pFramebuffer->create(width, heigth);
-	m_pFramebuffer->set_sample_count(samples);
+
+	m_sampleCount = samples;
+	m_bounceCount = bounces;
 
 	m_pixelIterator.resize(width * heigth);
 	std::iota(m_pixelIterator.begin(), m_pixelIterator.end(), 0u);
 }
 
-void CRenderCore::trace_ray(CScene* scene, FCameraComponent* camera, const math::vec3& origin)
+void CRenderCore::trace_ray(CScene* scene, FCameraComponent* camera, const glm::vec3& origin)
 {
-	std::for_each(std::execution::par_unseq, m_pixelIterator.begin(), m_pixelIterator.end(),
-		[this, scene, camera, &origin] (uint32_t index)
-		{ 
-			trace_ray(scene, camera, origin, index);
-		});
+	for (uint32_t sample = 1u; sample <= m_sampleCount; ++sample)
+	{
+		auto start = std::chrono::high_resolution_clock::now();
 
-	m_pFramebuffer->present();
+		std::for_each(std::execution::par_unseq, m_pixelIterator.begin(), m_pixelIterator.end(),
+			[this, scene, camera, &origin](uint32_t index)
+			{
+				trace_ray(scene, camera, origin, index);
+			});
+
+		auto end = std::chrono::high_resolution_clock::now();
+		auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+		std::cout << std::format("Frame {}: time {} ms\n", sample, duration);
+
+		m_pFramebuffer->increment_sample_count();
+
+		if (sample % 5u == 0u)
+		{
+			m_pFramebuffer->present();
+			
+			auto image_id = m_pFramebuffer->get_image();
+			auto& image = m_pResourceManager->get_image(image_id);
+			image->save(std::format("image_{}s.png", sample));
+		}
+	}
 }
 
-void CRenderCore::trace_ray(CScene* scene, FCameraComponent* camera, const math::vec3& origin, uint32_t ray_index)
+void CRenderCore::trace_ray(CScene* scene, FCameraComponent* camera, const glm::vec3& origin, uint32_t ray_index)
 {
 	auto& viewport_extent = camera->m_viewportExtent;
 
@@ -49,19 +69,16 @@ void CRenderCore::trace_ray(CScene* scene, FCameraComponent* camera, const math:
 
 	auto& ray_direction = camera->m_vRayDirections[ray_index];
 
-	for (uint32_t sample = 0u; sample < m_pFramebuffer->get_sample_count(); ++sample)
-	{
-		FRay ray{};
-		ray.m_origin = origin;
-		ray.set_direction(ray_direction + random_vec3(-0.0001f, 0.0001f));
-		m_pFramebuffer->add_pixel(x, y, math::to_vec4(hit_pixel(scene, ray, 50), 1.f));
-	}
+	FRay ray{};
+	ray.m_origin = origin;
+	ray.set_direction(ray_direction + random_vec3(-0.0001f, 0.0001f));
+	m_pFramebuffer->add_pixel(x, y, glm::vec4(hit_pixel(scene, ray, m_bounceCount), 1.f));
 }
 
-math::vec3 CRenderCore::hit_pixel(CScene* scene, FRay ray, int32_t bounces)
+glm::vec3 CRenderCore::hit_pixel(CScene* scene, FRay ray, int32_t bounces)
 {
 	if (bounces <= 0)
-		return math::vec3(0.f);
+		return glm::vec3(0.f);
 
 	FHitResult hit_result{};
 	if (!scene->trace_ray(ray, 0.001f, std::numeric_limits<float>::infinity(), hit_result))
@@ -70,8 +87,8 @@ math::vec3 CRenderCore::hit_pixel(CScene* scene, FRay ray, int32_t bounces)
 	auto& material = m_pResourceManager->get_material(hit_result.m_material_id);
 
 	float pdf{};
-	math::vec3 attenuation{};
-	math::vec3 emitted = material->emit(hit_result);
+	glm::vec3 attenuation{};
+	glm::vec3 emitted = material->emit(hit_result);
 
 	FRay scattered{};
 	if (!material->scatter(ray, hit_result, attenuation, scattered, pdf))

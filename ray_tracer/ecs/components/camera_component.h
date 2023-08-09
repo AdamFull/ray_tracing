@@ -25,7 +25,7 @@ struct FCameraComponent
 
 	glm::uvec2 m_viewportExtent{ 0u };
 
-	std::vector<math::vec3> m_vRayDirections{};
+	std::vector<glm::vec3> m_vRayDirections{};
 
 	bool m_bWasMoved{ true };
 };

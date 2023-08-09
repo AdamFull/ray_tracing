@@ -1,11 +1,11 @@
 #pragma once
 
-inline uint32_t pack_color_u32(const math::vec4& color)
+inline uint32_t pack_color_u32(const glm::vec4& color)
 {
-	uint32_t r = static_cast<uint32_t>(math::clamp(color.x, 0.f, 1.f) * 255.f) & 0xFFu;
-	uint32_t g = static_cast<uint32_t>(math::clamp(color.y, 0.f, 1.f) * 255.f) & 0xFFu;
-	uint32_t b = static_cast<uint32_t>(math::clamp(color.z, 0.f, 1.f) * 255.f) & 0xFFu;
-	uint32_t a = static_cast<uint32_t>(math::clamp(color.w, 0.f, 1.f) * 255.f) & 0xFFu;
+	uint32_t r = static_cast<uint32_t>(glm::clamp(color.x, 0.f, 1.f) * 255.f) & 0xFFu;
+	uint32_t g = static_cast<uint32_t>(glm::clamp(color.y, 0.f, 1.f) * 255.f) & 0xFFu;
+	uint32_t b = static_cast<uint32_t>(glm::clamp(color.z, 0.f, 1.f) * 255.f) & 0xFFu;
+	uint32_t a = static_cast<uint32_t>(glm::clamp(color.w, 0.f, 1.f) * 255.f) & 0xFFu;
 
 	return (a << 24) | (b << 16) | (g << 8) | r;
 }

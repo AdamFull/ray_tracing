@@ -8,7 +8,7 @@
 class CRayEngine
 {
 public:
-	void create(const std::filesystem::path& scenepath, uint32_t width, uint32_t height, uint32_t sample_count);
+	void create(const std::filesystem::path& scenepath, uint32_t width, uint32_t height, uint32_t sample_count, uint32_t bounce_count);
 
 	void update();
 

@@ -52,7 +52,8 @@ private:
 	entt::registry m_registry{};
 	entt::entity m_root{};
 
-	CBVHTree* m_pBVHTree{ nullptr };
+	//CBVHTree* m_pBVHTree{ nullptr };
+	CBVHTreeNew* m_pBVHTree{ nullptr };
 
 	std::vector<resource_id_t> m_vSamplerIds{};
 	std::vector<resource_id_t> m_vTextureIds{};

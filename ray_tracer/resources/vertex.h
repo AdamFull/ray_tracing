@@ -3,10 +3,10 @@
 struct FVertex
 {
 	FVertex() = default;
-	FVertex(const math::vec3& pos, const math::vec3& norm, const math::vec2& uv) : position(pos), normal(norm), texcoord(uv) {}
+	FVertex(const glm::vec3& pos, const glm::vec3& norm, const glm::vec2& uv) : m_position(pos), m_normal(norm), m_texcoord(uv) {}
 
-	math::vec3 color{};
-	math::vec3 position{};
-	math::vec3 normal{};
-	math::vec2 texcoord{};
+	glm::vec3 m_color{};
+	glm::vec3 m_position{};
+	glm::vec3 m_normal{};
+	glm::vec2 m_texcoord{};
 };

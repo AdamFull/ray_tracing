@@ -100,7 +100,8 @@ void CScene::create(const std::filesystem::path& scenepath, resource_id_t brdf_l
 
 	m_parentPath = scenepath.parent_path();
 
-	m_pBVHTree = new CBVHTree();
+	//m_pBVHTree = new CBVHTree();
+	m_pBVHTree = new CBVHTreeNew();
 
 	// Load scene
 	load_gltf_scene(scenepath, 0u);
@@ -226,7 +227,7 @@ void CScene::load_materials(const tinygltf::Model& model)
 {
 	if (model.materials.empty())
 	{
-		m_vMaterialIds.emplace_back(m_pResourceManager->add_material("default_diffuse_material", std::make_unique<CLambertianMaterial>(math::vec3(0.5f))));
+		m_vMaterialIds.emplace_back(m_pResourceManager->add_material("default_diffuse_material", std::make_unique<CLambertianMaterial>(glm::vec3(0.5f))));
 		return;
 	}
 
@@ -274,7 +275,7 @@ void CScene::load_materials(const tinygltf::Model& model)
 
 		if (mat.additionalValues.find("emissiveFactor") != mat.additionalValues.end())
 		{
-			material_ci.m_emissiveFactor = math::make_vec3(mat.additionalValues.at("emissiveFactor").ColorFactor().data());
+			material_ci.m_emissiveFactor = glm::make_vec3(mat.additionalValues.at("emissiveFactor").ColorFactor().data());
 			is_emissive = true;
 		}
 
@@ -287,11 +288,12 @@ void CScene::load_materials(const tinygltf::Model& model)
 		if (mat.values.find("metallicFactor") != mat.values.end())
 		{
 			material_ci.m_fMetallicFactor = static_cast<float>(mat.values.at("metallicFactor").Factor());
-			is_metallicRoughness = true;
+			if(material_ci.m_fMetallicFactor > 0.f)
+				is_metallicRoughness = true;
 		}
 
 		if (mat.values.find("baseColorFactor") != mat.values.end())
-			material_ci.m_baseColorFactor = math::make_vec4(mat.values.at("baseColorFactor").ColorFactor().data());
+			material_ci.m_baseColorFactor = glm::make_vec4(mat.values.at("baseColorFactor").ColorFactor().data());
 
 		if (mat.additionalValues.find("alphaMode") != mat.additionalValues.end())
 		{
@@ -354,6 +356,7 @@ void CScene::load_node(const entt::entity& parent, const tinygltf::Node& node, u
 	// Loading scale data
 	if (!node.scale.empty())
 		node_transform.m_scale = glm::make_vec3(node.scale.data());
+		//node_transform.m_scale = glm::vec3(1.f);
 
 	// Load baked model matrix
 	if (!node.matrix.empty())
@@ -455,25 +458,25 @@ void CScene::load_mesh_component(const entt::entity& target, const tinygltf::Nod
 			for (size_t v = 0; v < posAccessor.count; v++)
 			{
 				FVertex vert{};
-				vert.position = math::make_vec3(&bufferPos[v * 3]);
-				vert.normal = math::normalize(math::vec3(bufferNormals ? math::make_vec3(&bufferNormals[v * 3]) : math::vec3(0.0f)));
+				vert.m_position = glm::make_vec3(&bufferPos[v * 3]);
+				vert.m_normal = glm::normalize(glm::vec3(bufferNormals ? glm::make_vec3(&bufferNormals[v * 3]) : glm::vec3(0.0f)));
 
-				vert.texcoord = bufferTexCoords ? math::make_vec2(&bufferTexCoords[v * 2]) : math::vec2(0.0f);
+				vert.m_texcoord = bufferTexCoords ? glm::make_vec2(&bufferTexCoords[v * 2]) : glm::vec2(0.0f);
 				if (bufferColors)
 				{
 					switch (numColorComponents)
 					{
 					case 3:
-						vert.color = math::make_vec3(&bufferColors[v * 3]);
+						vert.m_color = glm::make_vec3(&bufferColors[v * 3]);
 						break;
 					case 4:
-						vert.color = math::make_vec3(&bufferColors[v * 4]);
+						vert.m_color = glm::make_vec3(&bufferColors[v * 4]);
 						break;
 					}
 				}
 				else
 				{
-					vert.color = math::vec3(1.0f);
+					vert.m_color = glm::vec3(1.0f);
 				}
 
 				vertexBuffer.push_back(vert);
@@ -543,7 +546,8 @@ void CScene::load_mesh_component(const entt::entity& target, const tinygltf::Nod
 			auto& v1 = vertexBuffer.at(i1);
 			auto& v2 = vertexBuffer.at(i2);
 
-			m_pBVHTree->emplace(new CTriangle(m_registry, target, material_id, v0, v1, v2));
+			//m_pBVHTree->emplace(new CTriangle(m_registry, target, material_id, v0, v1, v2));
+			m_pBVHTree->emplace(CTriangle(m_registry, target, material_id, v0, v1, v2));
 		}
 	}
 }
@@ -576,12 +580,12 @@ void CScene::load_light_component(const entt::entity& target, uint32_t light_ind
 {
 	const tinygltf::Light light = model.lights[light_index];
 
-	math::vec3 color;
+	glm::vec3 color;
 
 	if (light.color.empty())
-		color = math::vec3(1.f);
+		color = glm::vec3(1.f);
 	else
-		color = math::make_vec3(light.color.data());
+		color = glm::make_vec3(light.color.data());
 
 	if (light.type == "directional")
 	{
