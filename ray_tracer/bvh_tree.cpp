@@ -4,137 +4,236 @@
 
 #include <iostream>
 
-inline bool box_compare(CHittable* a, CHittable* b, int axis)
+constexpr uint32_t bins = 8u;
+
+void CBVHTreeNew::create()
 {
-    FAxixAlignedBoundingBox box_a{};
-    FAxixAlignedBoundingBox box_b{};
+    // Initialize node array
+    m_vNodes.resize(m_vTriangles.size() * 2ull + 64ull);
 
-    if (!a->bounds(box_a) || !b->bounds(box_b))
-        std::cerr << "No bounding box in bvh_node constructor.\n";
+    // Initialize triangle indices
+    m_vIndices.resize(m_vTriangles.size());
+    std::iota(m_vIndices.begin(), m_vIndices.end(), 0u);
 
-    return box_a.m_min[axis] < box_b.m_min[axis];
+    // Initialize triangles
+    for (auto& triangle : m_vTriangles)
+        triangle.create();
+
+    // Build tree
+    build();
 }
 
-
-bool box_x_compare(CHittable* a, CHittable* b) 
+void CBVHTreeNew::emplace(CTriangle triangle)
 {
-    return box_compare(a, b, 0);
+    m_vTriangles.emplace_back(triangle);
 }
 
-bool box_y_compare(CHittable* a, CHittable* b) 
+bool CBVHTreeNew::hit(const FRay& ray, float t_min, float t_max, FHitResult& hit_result) const
 {
-    return box_compare(a, b, 1);
+    return hit(ray, t_min, t_max, hit_result, 0u);
 }
 
-bool box_z_compare(CHittable* a, CHittable* b) 
+bool CBVHTreeNew::hit(const FRay& ray, float t_min, float t_max, FHitResult& hit_result, uint32_t node_idx) const
 {
-    return box_compare(a, b, 2);
-}
+    auto* node = &m_vNodes[node_idx];
+    uint32_t search_stack[64u];
+    uint32_t stack_idx{ 0u };
 
-CBVHNode::CBVHNode(std::vector<CTriangle*>& hittables, size_t start, size_t end)
-{
-    auto axis = static_cast<int32_t>(random(0.f, 2.f));
-    auto comparator = (axis == 0) ? box_x_compare
-        : (axis == 1) ? box_y_compare
-        : box_z_compare;
+    bool has_hit{ false };
+    float closest_hit{ std::numeric_limits<float>::max() };
 
-    size_t object_span = end - start;
-
-    if (object_span == 1ull)
-        m_pLeft = m_pRight = hittables[start];
-    else if (object_span == 2ull)
+    while (true)
     {
-        if (comparator(hittables[start], hittables[start + 1]))
+        if (node->is_leaf())
         {
-            m_pLeft = hittables[start];
-            m_pRight = hittables[start + 1];
+            for (uint32_t i = 0u; i < node->m_count; i++)
+            {
+                uint32_t inst_prim = (node_idx << 20u) + m_vIndices[node->m_left + i];
+                auto& triangle = m_vTriangles[inst_prim & 0xfffff];
+                if (triangle.hit(ray, t_min, closest_hit, hit_result))
+                {
+                    has_hit = true;
+                    closest_hit = hit_result.m_distance;
+                }
+            }
+
+            if (stack_idx == 0u) 
+                break; 
+            else 
+                node = &m_vNodes[search_stack[--stack_idx]];
+            continue;
+        }
+
+        uint32_t left_id{ node->m_left };
+        uint32_t right_id{ node->m_left + 1u };
+
+        auto dist1 = m_vNodes[left_id].m_aabb.hit(ray, hit_result);
+        auto dist2 = m_vNodes[right_id].m_aabb.hit(ray, hit_result);
+
+        if (dist1 > dist2) 
+        { 
+            std::swap(dist1, dist2); 
+            std::swap(left_id, right_id);
+        }
+
+        if (math::compare_float(dist1, std::numeric_limits<float>::max()))
+        {
+            if (stack_idx == 0) 
+                break; 
+            else 
+                node = &m_vNodes[search_stack[--stack_idx]];
         }
         else
         {
-            m_pLeft = hittables[start + 1];
-            m_pRight = hittables[start];
+            node = &m_vNodes[left_id];
+            if (!math::compare_float(dist2, std::numeric_limits<float>::max()))
+                search_stack[stack_idx++] = right_id;
         }
     }
-    else
-    {
-        std::sort(std::execution::par, hittables.begin() + start, hittables.begin() + end, comparator);
 
-        auto mid = start + object_span / 2ull;
-
-        m_pLeft = new CBVHNode(hittables, start, mid);
-        m_pRight = new CBVHNode(hittables, mid, end);
-    }
-
-    FAxixAlignedBoundingBox box_left, box_right;
-
-    if (!m_pLeft->bounds(box_left) || !m_pRight->bounds(box_right))
-        std::cerr << "No bounding box in bvh_node constructor.\n";
-
-    m_aabb = box_left.surrounding(box_right);
+    return has_hit;
 }
 
-CBVHNode::~CBVHNode()
+void CBVHTreeNew::build()
 {
-    if (m_pLeft == m_pRight && (m_pLeft || m_pRight))
-    {
-        delete m_pLeft;
-        m_pLeft = m_pRight = nullptr;
-    }
+    m_size = 2ull;
 
-    if (m_pLeft)
-    {
-        delete m_pLeft;
-        m_pLeft = nullptr;
-    }
+    auto& root = m_vNodes[0ull];
+    root.m_left = 0u;
+    root.m_count = m_vTriangles.size();
 
-    if (m_pRight)
-    {
-        delete m_pRight;
-        m_pRight = nullptr;
-    }
+    FAxixAlignedBoundingBox centroid_aabb{};
+    grow(0u, centroid_aabb);
+
+    subdivide(0u, 0u, centroid_aabb);
 }
 
-bool CBVHNode::hit(const FRay& ray, float t_min, float t_max, FHitResult& hit_result) const
+void CBVHTreeNew::grow(uint32_t node_idx, FAxixAlignedBoundingBox& aabb)
 {
-	if (!m_aabb.hit(ray, t_min, t_max))
-		return false;
+    auto& node = m_vNodes[node_idx];
 
-	bool hit_left = m_pLeft->hit(ray, t_min, t_max, hit_result);
-	bool hit_right = m_pRight->hit(ray, t_min, hit_left ? hit_result.m_distance : t_max, hit_result);
+    node.m_aabb.m_min = aabb.m_min = glm::vec3(std::numeric_limits<float>::max());
+    node.m_aabb.m_max = aabb.m_max = glm::vec3(-std::numeric_limits<float>::max());
 
-	return hit_left || hit_right;
-}
-
-bool CBVHNode::bounds(FAxixAlignedBoundingBox& output_box) const
-{
-    output_box = m_aabb;
-    return true;
-}
-
-
-CBVHTree::~CBVHTree()
-{
-    if (m_pRoot)
+    for (uint32_t first = node.m_left, i = 0u; i < node.m_count; ++i)
     {
-        delete m_pRoot;
-        m_pRoot = nullptr;
+        uint32_t triangle_idx = m_vIndices[first + i];
+        auto& triangle = m_vTriangles[triangle_idx];
+
+        auto& triangle_bounds = triangle.bounds();
+        node.m_aabb.grow(triangle_bounds);
+
+        auto& centroid = triangle.centroid();
+        aabb.m_min = math::min(aabb.m_min, centroid);
+        aabb.m_max = math::max(aabb.m_max, centroid);
     }
 }
 
-void CBVHTree::create()
+void CBVHTreeNew::subdivide(uint32_t node_idx, uint32_t depth, FAxixAlignedBoundingBox& centroid)
 {
-    for (auto& object : m_vHittables)
-        object->create();
+    auto& node = m_vNodes[node_idx];
 
-    m_pRoot = new CBVHNode(m_vHittables, 0ull, m_vHittables.size());
+    uint32_t axis{ 0u }, split_pos{ 0u };
+    float split_cost = find_best_split(node, axis, split_pos, centroid);
+
+    auto nosplit_cost = node.cost();
+    if (math::greater_equal_float(split_cost, nosplit_cost))
+        return;
+
+    uint32_t i = node.m_left;
+    uint32_t j = i + node.m_count - 1u;
+
+    float scale = static_cast<float>(bins) / (centroid.m_max[axis] - centroid.m_min[axis]);
+    while (i <= j)
+    {
+        auto triangle_idx = m_vIndices[i];
+        auto& triangle = m_vTriangles[triangle_idx];
+
+        uint32_t bin_idx = glm::min(bins - 1u, static_cast<uint32_t>((triangle.centroid()[axis] - centroid.m_min[axis]) * scale));
+        if (bin_idx < split_pos) 
+            i++; 
+        else 
+            std::swap(m_vIndices[i], m_vIndices[j--]);
+    }
+
+    uint32_t left_count = i - node.m_left;
+    if (left_count == 0u || left_count == node.m_count)
+        return;
+
+    int left_child_idx = m_size++;
+    m_vNodes[left_child_idx].m_left = node.m_left;
+    m_vNodes[left_child_idx].m_count = left_count;
+
+    int right_chilt_idx = m_size++;
+    m_vNodes[right_chilt_idx].m_left = i;
+    m_vNodes[right_chilt_idx].m_count = node.m_count - left_count;
+
+    node.m_left = left_child_idx;
+    node.m_count = 0u;
+
+    // Subdivide left
+    grow(left_child_idx, centroid);
+    subdivide(left_child_idx, depth + 1u, centroid);
+
+    // Subdivide right
+    grow(right_chilt_idx, centroid);
+    subdivide(right_chilt_idx, depth + 1u, centroid);
 }
 
-void CBVHTree::emplace(CTriangle* hittable)
+float CBVHTreeNew::find_best_split(FBVHNode& node, uint32_t& axis, uint32_t& split_pos, FAxixAlignedBoundingBox& centroid)
 {
-    m_vHittables.emplace_back(hittable);
-}
+    float best_cost = std::numeric_limits<float>::max();
+    for (uint32_t a = 0; a < 3u; ++a)
+    {
+        float boundx_min = centroid.m_min[a];
+        float boundx_max = centroid.m_max[a];
 
-bool CBVHTree::hit(const FRay& ray, float t_min, float t_max, FHitResult& hit_result) const
-{
-    return m_pRoot->hit(ray, t_min, t_max, hit_result);
+        if (math::compare_float(boundx_min, boundx_max))
+            continue;
+
+        float scale = static_cast<float>(bins) / (boundx_max - boundx_min);
+
+        std::array<float, bins - 1u> left_area;
+        std::array<float, bins - 1u> right_area;
+
+        uint32_t left_sum{ 0u };
+        uint32_t right_sum{ 0u };
+
+        std::array<FBVHTreeBin, bins> bin;
+
+        for (uint32_t i = 0u; i < node.m_count; i++)
+        {
+            auto triangle_idx = m_vIndices[node.m_left + i];
+            auto& triangle = m_vTriangles[triangle_idx];
+            int binIdx = glm::min(bins - 1u, static_cast<uint32_t>((triangle.centroid()[a] - boundx_min) * scale));
+            bin[binIdx].m_count++;
+            bin[binIdx].m_bounds.grow(triangle.bounds());
+        }
+
+        FAxixAlignedBoundingBox left, right;
+        for (uint32_t i = 0u; i < bins - 1u; i++)
+        {
+            left_sum += bin[i].m_count;
+            left.grow(bin[i].m_bounds);
+            left_area[i] = static_cast<float>(left_sum) * left.area();
+
+            right_sum += bin[bins - 1u - i].m_count;
+            right.grow(bin[bins - 1u - i].m_bounds);
+            right_area[bins - 2u - i] = static_cast<float>(right_sum) * right.area();
+        }
+
+        scale = (boundx_max - boundx_min) / static_cast<float>(bins);
+        for (uint32_t i = 0u; i < bins - 1u; i++)
+        {
+            const float plane_cost = left_area[i] + right_area[i];
+            if (plane_cost < best_cost)
+            {
+                axis = a;
+                split_pos = i + 1u;
+                best_cost = plane_cost;
+            }
+        }
+    }
+
+    return best_cost;
 }

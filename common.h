@@ -5,7 +5,14 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/quaternion.hpp>
 
-#include "ray_tracer/math/math.hpp"
+#define USE_INTRINSICS
+//#define USE_INTRINSICS_BASIC_ARITHMETIC
+//#define USE_INTRINSICS_OPERATIONS
+#define USE_INTRINSICS_INTERSECTION
+
+#include "math.hpp"
+
+//#include "ray_tracer/math/math.hpp"
 
 #include <limits>
 #include <string>
@@ -13,6 +20,7 @@
 #include <memory>
 #include <cmath>
 #include <filesystem>
+#include <iostream>
 
 #include <algorithm>
 #include <numeric>

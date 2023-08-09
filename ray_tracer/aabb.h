@@ -6,29 +6,20 @@ struct FAxixAlignedBoundingBox
 {
 	FAxixAlignedBoundingBox()
 	{
-		m_min = math::vec3(std::numeric_limits<float>::max());
-		m_max = math::vec3(std::numeric_limits<float>::min());
+		m_min = glm::vec3(std::numeric_limits<float>::max());
+		m_max = glm::vec3(-std::numeric_limits<float>::max());
 	}
 
-	FAxixAlignedBoundingBox(const float min, const float max) : m_min(min), m_max(max) {}
-	FAxixAlignedBoundingBox(const math::vec3& min, const math::vec3& max) : m_min(min), m_max(max) {}
+	FAxixAlignedBoundingBox(const glm::vec3& min, const glm::vec3& max) : m_min(min), m_max(max) {}
 
-	math::vec3 extent() const
+	glm::vec3 extent() const
 	{
 		return m_max - m_min;
 	}
 
-	bool hit(const FRay& ray, float t_min, float t_max) const
+	float hit(const FRay& ray, const FHitResult& hit_result) const
 	{
-		return math::ray_aabb_intersect(ray.m_origin, ray.m_inv_direction, m_min, m_max);
-	}
-
-	FAxixAlignedBoundingBox surrounding(const FAxixAlignedBoundingBox& rhs)
-	{
-		auto small = math::min(m_min, rhs.m_min);
-		auto big = math::max(m_max, rhs.m_max);
-
-		return FAxixAlignedBoundingBox(small, big);
+		return math::ray_aabb_intersect(ray.m_origin, ray.m_inv_direction, m_min, m_max, hit_result.m_distance);
 	}
 
 	void grow(const FAxixAlignedBoundingBox& rhs)
@@ -43,6 +34,6 @@ struct FAxixAlignedBoundingBox
 		return ext.x * ext.y + ext.y * ext.z + ext.z * ext.x;
 	}
 
-	math::vec3 m_min;
-	math::vec3 m_max;
+	glm::vec3 m_min;
+	glm::vec3 m_max;
 };
