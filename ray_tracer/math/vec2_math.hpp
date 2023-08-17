@@ -5,78 +5,58 @@
 
 namespace math
 {
-	template<>
-	inline vec2 min(const vec2& lhs, const vec2& rhs) noexcept
+	template<class _Ty>
+	constexpr inline vec2<_Ty> min(const vec2<_Ty>& lhs, const vec2<_Ty>& rhs) noexcept
 	{
-		vec2 res{};
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_OPERATIONS)
-		res.vec128 = _mm_min_ps(lhs.vec128, rhs.vec128);
-#else
-		res.x = std::min(lhs.x, rhs.x);
-		res.y = std::min(lhs.y, rhs.y);
-#endif
+		vec2<_Ty> res{};
+		res.x = min(lhs.x, rhs.x);
+		res.y = min(lhs.y, rhs.y);
 		return res;
 	}
 
-	template<>
-	inline vec2 max(const vec2& lhs, const vec2& rhs) noexcept
+	template<class _Ty>
+	constexpr inline vec2<_Ty> max(const vec2<_Ty>& lhs, const vec2<_Ty>& rhs) noexcept
 	{
-		vec2 res{};
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_OPERATIONS)
-		res.vec128 = _mm_max_ps(lhs.vec128, rhs.vec128);
-#else
-		res.x = std::max(lhs.x, rhs.x);
-		res.y = std::max(lhs.y, rhs.y);
-#endif
+		vec2<_Ty> res{};
+		res.x = max(lhs.x, rhs.x);
+		res.y = max(lhs.y, rhs.y);
 		return res;
 	}
 
-	template<>
-	inline vec2 sqrt(vec2& vec)
+	template<class _Ty>
+	inline vec2<_Ty> sqrt(const vec2<_Ty>& vec)
 	{
-		vec2 res{};
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_OPERATIONS)
-		res.vec128 = _mm_sqrt_ps(vec.vec128);
-#else
-		res.x = std::sqrt(vec.x);
-		res.y = std::sqrt(vec.y);
-#endif
+		vec2<_Ty> res{};
+		res.x = sqrt(vec.x);
+		res.y = sqrt(vec.y);
 		return res;
 	}
 
-
-	inline float dot(const vec2& lhs, const vec2& rhs)
+	template<class _Ty>
+	constexpr inline _Ty dot(const vec2<_Ty>& lhs, const vec2<_Ty>& rhs) noexcept
 	{
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_OPERATIONS)
-		return _mm_cvtss_f32(_vec128_dot_product(lhs.vec128, rhs.vec128));
-#else
-		return lhs.x * rhs.x + lhs.y * rhs.y;
-#endif
+		_Ty res{ static_cast<_Ty>(0) };
+		_vector_dot_product<_Ty, 2ull>(lhs.data, rhs.data, res);
+		return res;
 	}
 
-	inline float length2(const vec2& vec) noexcept
+	template<class _Ty>
+	constexpr inline _Ty length2(const vec2<_Ty>& vec) noexcept
 	{
 		return dot(vec, vec);
 	}
 
-	inline float length(const vec2& vec) noexcept
+	template<class _Ty>
+	inline _Ty length(const vec2<_Ty>& vec) noexcept
 	{
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_OPERATIONS)
-		return _mm_cvtss_f32(_vec128_length(vec.vec128));
-#else
-		return std::sqrt(length2(vec));
-#endif
+		return sqrt(length2(vec));
 	}
 
-	inline vec2 normalize(const vec2& vec)
+	template<class _Ty>
+	inline vec2<_Ty> normalize(const vec2<_Ty>& vec)
 	{
-		vec2 res{};
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_OPERATIONS)
-		res.vec128 = _vec128_normalize(vec.vec128);
-#else
-		auto len = length(vec);
-		res = vec / len;
-#endif
+		vec2<_Ty> res{};
+		res = vec / length(vec);
 		return res;
 	}
 }

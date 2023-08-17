@@ -4,388 +4,235 @@
 
 namespace math
 {
+	template<class _Ty>
 	struct vec4
 	{
-		vec4() : x{ 0.f }, y{ 0.f }, z{ 0.f }, w{ 0.f } {}
-		vec4(float v) : x{ v }, y{ v }, z{ v }, w{ v } {}
-		vec4(float _x, float _y, float _z, float _w) : x{ _x }, y{ _y }, z{ _z }, w{ _w } {}
+		vec4() : x{ static_cast<_Ty>(0) }, y{ static_cast<_Ty>(0) }, z{ static_cast<_Ty>(0) }, w{ static_cast<_Ty>(0) } {}
+		vec4(_Ty v) : x{ v }, y{ v }, z{ v }, w{ v } {}
+		vec4(_Ty _x, _Ty _y, _Ty _z, _Ty _w) : x{ _x }, y{ _y }, z{ _z }, w{ _w } {}
 
 		vec4& operator+=(const vec4& other) noexcept;
 		vec4& operator-=(const vec4& other) noexcept;
 		vec4& operator*=(const vec4& other) noexcept;
 		vec4& operator/=(const vec4& other);
 
-		vec4& operator+=(const float& other) noexcept;
-		vec4& operator-=(const float& other) noexcept;
-		vec4& operator*=(const float& other) noexcept;
-		vec4& operator/=(const float& other);
+		vec4& operator+=(const _Ty& other) noexcept;
+		vec4& operator-=(const _Ty& other) noexcept;
+		vec4& operator*=(const _Ty& other) noexcept;
+		vec4& operator/=(const _Ty& other);
 
 		vec4 operator-() noexcept;
 
-		const float& operator[](size_t index) const
+		const _Ty& operator[](size_t index) const
 		{
-			if (index == 0ull)
-				return x;
-			else if (index == 1ull)
-				return y;
-			else if (index == 2ull)
-				return z;
-			else if (index == 3ull)
-				return w;
-
-			assert(false && "Index out of range");
+			return data[index];
 		}
 
-		float& operator[](size_t index)
+		_Ty& operator[](size_t index)
 		{
-			if (index == 0ull)
-				return x;
-			else if (index == 1ull)
-				return y;
-			else if (index == 2ull)
-				return z;
-			else if (index == 3ull)
-				return w;
-
-			assert(false && "Index out of range");
+			return data[index];
 		}
 
 		union
 		{
-			struct
-			{
-				float x;
-				float y;
-				float z;
-				float w;
-			};
-#if defined(USE_INTRINSICS)
-			__m128 vec128;
-#else
-			float data[4ull];
-#endif
+			struct { _Ty x; _Ty y; _Ty z; _Ty w; };
+			struct { _Ty r; _Ty g; _Ty b; _Ty a; };
+			_Ty data[4ull];
 		};
 	};
 
 
-	constexpr inline bool operator==(const vec4& lhs, const vec4& rhs) noexcept
+	template<class _Ty>
+	constexpr inline bool operator==(const vec4<_Ty>& lhs, const vec4<_Ty>& rhs) noexcept
 	{
-		return compare_float(lhs.x, rhs.x) && compare_float(lhs.y, rhs.y) && compare_float(lhs.z, rhs.z) && compare_float(lhs.w, rhs.w);
+		return _vector_equal<_Ty, 2ull>(lhs.data, rhs.data);
 	}
 
-	constexpr inline bool operator!=(const vec4& lhs, const vec4& rhs) noexcept
+	template<class _Ty>
+	constexpr inline bool operator!=(const vec4<_Ty>& lhs, const vec4<_Ty>& rhs) noexcept
 	{
 		return !operator==(lhs, rhs);
 	}
 
-	constexpr inline bool operator<=(const vec4& lhs, const vec4& rhs) noexcept
+	template<class _Ty>
+	constexpr inline bool operator<=(const vec4<_Ty>& lhs, const vec4<_Ty>& rhs) noexcept
 	{
-		return greater_equal_float(lhs.x, rhs.x) && greater_equal_float(lhs.y, rhs.y) && greater_equal_float(lhs.z, rhs.z) && greater_equal_float(lhs.w, rhs.w);
+		return _vector_less_equal<_Ty, 2ull>(lhs.data, rhs.data);
 	}
 
-	constexpr inline bool operator>=(const vec4& lhs, const vec4& rhs) noexcept
+	template<class _Ty>
+	constexpr inline bool operator>=(const vec4<_Ty>& lhs, const vec4<_Ty>& rhs) noexcept
 	{
-		return less_equal_float(lhs.x, rhs.x) && less_equal_float(lhs.y, rhs.y) && less_equal_float(lhs.z, rhs.z) && less_equal_float(lhs.w, rhs.w);
+		return _vector_greather_equal<_Ty, 2ull>(lhs.data, rhs.data);
 	}
 
 	// vec to vec
-	inline vec4 operator+(const vec4& lhs, const vec4& rhs) noexcept
+	template<class _Ty>
+	constexpr inline vec4<_Ty> operator+(const vec4<_Ty>& lhs, const vec4<_Ty>& rhs) noexcept
 	{
-		vec4 res{};
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
-		res.vec128 = _mm_add_ps(lhs.vec128, rhs.vec128);
-#else
-		res.x = lhs.x + rhs.x;
-		res.y = lhs.y + rhs.y;
-		res.z = lhs.z + rhs.z;
-		res.w = lhs.w + rhs.w;
-#endif
+		vec4<_Ty> res{};
+		_vector_add<_Ty, 2ull>(lhs.data, rhs.data, res.data);
 		return res;
 	}
 
-	inline vec4 operator-(const vec4& lhs, const vec4& rhs) noexcept
+	template<class _Ty>
+	constexpr inline vec4<_Ty> operator-(const vec4<_Ty>& lhs, const vec4<_Ty>& rhs) noexcept
 	{
-		vec4 res{};
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
-		res.vec128 = _mm_sub_ps(lhs.vec128, rhs.vec128);
-#else
-		res.x = lhs.x - rhs.x;
-		res.y = lhs.y - rhs.y;
-		res.z = lhs.z - rhs.z;
-		res.w = lhs.w - rhs.w;
-#endif
+		vec4<_Ty> res{};
+		_vector_sub<_Ty, 2ull>(lhs.data, rhs.data, res.data);
 		return res;
 	}
 
-	inline vec4 operator*(const vec4& lhs, const vec4& rhs) noexcept
+	template<class _Ty>
+	constexpr inline vec4<_Ty> operator*(const vec4<_Ty>& lhs, const vec4<_Ty>& rhs) noexcept
 	{
-		vec4 res{};
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
-		res.vec128 = _mm_mul_ps(lhs.vec128, rhs.vec128);
-#else
-		res.x = lhs.x * rhs.x;
-		res.y = lhs.y * rhs.y;
-		res.z = lhs.z * rhs.z;
-		res.w = lhs.w * rhs.w;
-#endif
+		vec4<_Ty> res{};
+		_vector_mul<_Ty, 2ull>(lhs.data, rhs.data, res.data);
 		return res;
 	}
 
-	inline vec4 operator/(const vec4& lhs, const vec4& rhs)
+	template<class _Ty>
+	inline vec4<_Ty> operator/(const vec4<_Ty>& lhs, const vec4<_Ty>& rhs)
 	{
-		vec4 res{};
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
-		res.vec128 = _mm_div_ps(lhs.vec128, rhs.vec128);
-#else
-		res.x = lhs.x / rhs.x;
-		res.y = lhs.y / rhs.y;
-		res.z = lhs.z / rhs.z;
-		res.w = lhs.w / rhs.w;
-#endif
+		vec4<_Ty> res{};
+		_vector_div<_Ty, 2ull>(lhs.data, rhs.data, res.data);
 		return res;
 	}
 
 	// vec to scalar
-	inline vec4 operator+(const vec4& lhs, const float& rhs) noexcept
+	template<class _Ty>
+	inline vec4<_Ty> operator+(const vec4<_Ty>& lhs, const _Ty& rhs) noexcept
 	{
-		vec4 res{};
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
-		res.vec128 = _mm_add_ps(lhs.vec128, _mm_set_ps1(rhs));
-#else
-		res.x = lhs.x + rhs;
-		res.y = lhs.y + rhs;
-		res.z = lhs.z + rhs;
-		res.w = lhs.w + rhs;
-#endif
+		vec4<_Ty> res{};
+		_vector_add<_Ty, 2ull>(lhs.data, rhs, res.data);
 		return res;
 	}
 
-	inline vec4 operator-(const vec4& lhs, const float& rhs) noexcept
+	template<class _Ty>
+	inline vec4<_Ty> operator-(const vec4<_Ty>& lhs, const _Ty& rhs) noexcept
 	{
-		vec4 res{};
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
-		res.vec128 = _mm_sub_ps(lhs.vec128, _mm_set_ps1(rhs));
-#else
-		res.x = lhs.x - rhs;
-		res.y = lhs.y - rhs;
-		res.z = lhs.z - rhs;
-		res.w = lhs.w - rhs;
-#endif
+		vec4<_Ty> res{};
+		_vector_sub<_Ty, 2ull>(lhs.data, rhs, res.data);
 		return res;
 	}
 
-	inline vec4 operator*(const vec4& lhs, const float& rhs) noexcept
+	template<class _Ty>
+	inline vec4<_Ty> operator*(const vec4<_Ty>& lhs, const _Ty& rhs) noexcept
 	{
-		vec4 res{};
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
-		res.vec128 = _mm_mul_ps(lhs.vec128, _mm_set_ps1(rhs));
-#else
-		res.x = lhs.x * rhs;
-		res.y = lhs.y * rhs;
-		res.z = lhs.z * rhs;
-		res.w = lhs.w * rhs;
-#endif
+		vec4<_Ty> res{};
+		_vector_mul<_Ty, 2ull>(lhs.data, rhs, res.data);
 		return res;
 	}
 
-	inline vec4 operator/(const vec4& lhs, const float& rhs)
+	template<class _Ty>
+	inline vec4<_Ty> operator/(const vec4<_Ty>& lhs, const _Ty& rhs)
 	{
-		vec4 res{};
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
-		res.vec128 = _mm_div_ps(lhs.vec128, _mm_set_ps1(rhs));
-#else
-		res.x = lhs.x / rhs;
-		res.y = lhs.y / rhs;
-		res.z = lhs.z / rhs;
-		res.w = lhs.w / rhs;
-#endif
+		vec4<_Ty> res{};
+		_vector_div<_Ty, 2ull>(lhs.data, rhs, res.data);
 		return res;
 	}
 
 	// scalar to vec
-	inline vec4 operator+(const float& lhs, const vec4& rhs) noexcept
+	template<class _Ty>
+	inline vec4<_Ty> operator+(const _Ty& lhs, const vec4<_Ty>& rhs) noexcept
 	{
-		vec4 res{};
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
-		res.vec128 = _mm_add_ps(_mm_set_ps1(lhs), rhs.vec128);
-#else
-		res.x = lhs + rhs.x;
-		res.y = lhs + rhs.y;
-		res.z = lhs + rhs.z;
-		res.w = lhs + rhs.w;
-#endif
+		vec4<_Ty> res{};
+		_vector_add<_Ty, 2ull>(lhs, rhs.data, res.data);
 		return res;
 	}
 
-	inline vec4 operator-(const float& lhs, const vec4& rhs) noexcept
+	template<class _Ty>
+	inline vec4<_Ty> operator-(const _Ty& lhs, const vec4<_Ty>& rhs) noexcept
 	{
-		vec4 res{};
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
-		res.vec128 = _mm_sub_ps(_mm_set_ps1(lhs), rhs.vec128);
-#else
-		res.x = lhs - rhs.x;
-		res.y = lhs - rhs.y;
-		res.z = lhs - rhs.z;
-		res.w = lhs - rhs.w;
-#endif
+		vec4<_Ty> res{};
+		_vector_sub<_Ty, 2ull>(lhs, rhs.data, res.data);
 		return res;
 	}
 
-	inline vec4 operator*(const float& lhs, const vec4& rhs) noexcept
+	template<class _Ty>
+	inline vec4<_Ty> operator*(const _Ty& lhs, const vec4<_Ty>& rhs) noexcept
 	{
-		vec4 res{};
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
-		res.vec128 = _mm_mul_ps(_mm_set_ps1(lhs), rhs.vec128);
-#else
-		res.x = lhs * rhs.x;
-		res.y = lhs * rhs.y;
-		res.z = lhs * rhs.z;
-		res.w = lhs * rhs.w;
-#endif
+		vec4<_Ty> res{};
+		_vector_mul<_Ty, 2ull>(lhs, rhs.data, res.data);
 		return res;
 	}
 
-	inline vec4 operator/(const float& lhs, const vec4& rhs)
+	template<class _Ty>
+	inline vec4<_Ty> operator/(const _Ty& lhs, const vec4<_Ty>& rhs)
 	{
-		vec4 res{};
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
-		res.vec128 = _mm_div_ps(_mm_set_ps1(lhs), rhs.vec128);
-#else
-		res.x = lhs / rhs.x;
-		res.y = lhs / rhs.y;
-		res.z = lhs / rhs.z;
-		res.w = lhs / rhs.w;
-#endif
+		vec4<_Ty> res{};
+		_vector_div<_Ty, 2ull>(lhs, rhs.data, res.data);
 		return res;
 	}
 
 	// operators
-	inline vec4& vec4::operator+=(const vec4& other) noexcept
+	template<class _Ty>
+	inline vec4<_Ty>& vec4<_Ty>::operator+=(const vec4<_Ty>& other) noexcept
 	{
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
-		vec128 = _mm_add_ps(vec128, other.vec128);
-#else
-		x += other.x;
-		y += other.y;
-		z += other.z;
-		w += other.w;
-#endif
+		_vector_add<_Ty, 2ull>(data, other.data);
 		return *this;
 	}
 
-	inline vec4& vec4::operator-=(const vec4& other) noexcept
+	template<class _Ty>
+	inline vec4<_Ty>& vec4<_Ty>::operator-=(const vec4<_Ty>& other) noexcept
 	{
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
-		vec128 = _mm_sub_ps(vec128, other.vec128);
-#else
-		x -= other.x;
-		y -= other.y;
-		z -= other.z;
-		w -= other.w;
-#endif
+		_vector_sub<_Ty, 2ull>(data, other.data);
 		return *this;
 	}
 
-	inline vec4& vec4::operator*=(const vec4& other) noexcept
+	template<class _Ty>
+	inline vec4<_Ty>& vec4<_Ty>::operator*=(const vec4<_Ty>& other) noexcept
 	{
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
-		vec128 = _mm_mul_ps(vec128, other.vec128);
-#else
-		x *= other.x;
-		y *= other.y;
-		z *= other.z;
-		w *= other.w;
-#endif
+		_vector_mul<_Ty, 2ull>(data, other.data);
 		return *this;
 	}
 
-	inline vec4& vec4::operator/=(const vec4& other)
+	template<class _Ty>
+	inline vec4<_Ty>& vec4<_Ty>::operator/=(const vec4<_Ty>& other)
 	{
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
-		vec128 = _mm_div_ps(vec128, other.vec128);
-#else
-		x /= other.x;
-		y /= other.y;
-		z /= other.z;
-		w /= other.w;
-#endif
+		_vector_div<_Ty, 2ull>(data, other.data);
 		return *this;
 	}
 
-	inline vec4& vec4::operator+=(const float& other) noexcept
+	template<class _Ty>
+	inline vec4<_Ty>& vec4<_Ty>::operator+=(const _Ty& other) noexcept
 	{
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
-		vec128 = _mm_add_ps(vec128, _mm_set_ps1(other));
-#else
-		x += other;
-		y += other;
-		z += other;
-		w += other;
-#endif
+		_vector_add<_Ty, 2ull>(data, other);
 		return *this;
 	}
 
-	inline vec4& vec4::operator-=(const float& other) noexcept
+	template<class _Ty>
+	inline vec4<_Ty>& vec4<_Ty>::operator-=(const _Ty& other) noexcept
 	{
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
-		vec128 = _mm_sub_ps(vec128, _mm_set_ps1(other));
-#else
-		x -= other;
-		y -= other;
-		z -= other;
-		w -= other;
-#endif
+		_vector_sub<_Ty, 2ull>(data, other);
 		return *this;
 	}
 
-	inline vec4& vec4::operator*=(const float& other) noexcept
+	template<class _Ty>
+	inline vec4<_Ty>& vec4<_Ty>::operator*=(const _Ty& other) noexcept
 	{
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
-		vec128 = _mm_mul_ps(vec128, _mm_set_ps1(other));
-#else
-		x *= other;
-		y *= other;
-		z *= other;
-		w *= other;
-#endif
+		_vector_mul<_Ty, 2ull>(data, other);
 		return *this;
 	}
 
-	inline vec4& vec4::operator/=(const float& other)
+	template<class _Ty>
+	inline vec4<_Ty>& vec4<_Ty>::operator/=(const _Ty& other)
 	{
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
-		vec128 = _mm_div_ps(vec128, _mm_set_ps1(other));
-#else
-		x /= other;
-		y /= other;
-		z /= other;
-		w /= other;
-#endif
+		_vector_div<_Ty, 2ull>(data, other);
 		return *this;
 	}
 
-	inline vec4 vec4::operator-() noexcept
+	template<class _Ty>
+	inline vec4<_Ty> vec4<_Ty>::operator-() noexcept
 	{
-		static __m128 zero = _mm_setzero_ps();
-		vec4 res{};
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_BASIC_ARITHMETIC)
-		res.vec128 = _mm_sub_ps(zero, vec128);
-#else
-		res.x *= -1.f;
-		res.y *= -1.f;
-		res.z *= -1.f;
-		res.w *= -1.f;
-#endif
+		vec4<_Ty> res{};
+		_vector_mul<_Ty, 2ull>(data, -1.f);
 		return res;
 	}
 
-	inline vec4 make_vec4(const float* vec)
+	template<class _Ty>
+	inline vec4<_Ty> make_vec4(const _Ty* vec)
 	{
-		return vec4(vec[0], vec[1], vec[2], vec[3]);
-	}
-
-	inline vec4 make_vec4(const double* vec)
-	{
-		return vec4(vec[0], vec[1], vec[2], vec[3]);
+		return vec4<_Ty>(vec[0], vec[1], vec[2], vec[3]);
 	}
 }
