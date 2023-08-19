@@ -2,11 +2,24 @@
 
 #include <xmmintrin.h>
 #include <emmintrin.h>
+#include <immintrin.h>
 
 #define MAKE_SSE_VECTOR3(name) struct { union  { struct { glm::vec3 m_##name; float m_align_##name; }; __m128 m_vec128_##name; }; };
 
 namespace math
 {
+	extern "C" double sqrt14(double n);
+
+	inline float fsqrt(float n)
+	{
+		//unsigned int i = *(unsigned int*)&n;
+		//i += 127 << 23;
+		//i >>= 1;
+		//return *(float*)&i;
+		return std::sqrt(n);
+		//return sqrt14(n);
+	}
+
 	template<class _Ty>
 	constexpr inline _Ty abs(_Ty _v) noexcept
 	{
@@ -70,7 +83,15 @@ namespace math
 		return _mm_sub_ps(tmp3, tmp4);
 	}
 
+	inline float dot(const glm::vec3& a, const glm::vec3& b)
+	{
+		return a.x * b.x + a.y * b.y + a.z * b.z;
+	}
 
+	inline glm::vec3 normalize(const glm::vec3& vec)
+	{
+		return vec / static_cast<float>(fsqrt(dot(vec, vec)));
+	}
 
 
 	inline glm::vec3 apply_otb(const glm::vec3& t, const glm::vec3& b, const glm::vec3& n, const glm::vec3& v)
@@ -114,6 +135,15 @@ namespace math
 #else
 		return glm::max(lhs, rhs);
 #endif
+	}
+
+	inline __m128 _mul_vec_to_mat(const __m128& vec, const __m128& r0, const __m128& r1, const __m128& r2)
+	{
+		__m128 _res = _mm_setzero_ps();
+		_res = _mm_add_ps(_res, _mm_mul_ps(vec, r0));
+		_res = _mm_add_ps(_res, _mm_mul_ps(vec, r1));
+		_res = _mm_add_ps(_res, _mm_mul_ps(vec, r2));
+		return _res;
 	}
 
 	inline float ray_aabb_intersect_impl_sse(const __m128& ray_origin, const __m128& inv_ray_dir, const __m128& bmin, const __m128& bmax, float distance) noexcept
@@ -163,9 +193,93 @@ namespace math
 
 	}
 
+	inline float ray_aabb_intersect_test(const glm::vec3& r0, const glm::vec3& ird, const glm::vec3& bmin, const glm::vec3& bmax, float distance)
+	{
+		__m128 _r0 = _mm_setr_ps(r0.x, r0.y, r0.z, 0.f);
+		__m128 _ird = _mm_setr_ps(ird.x, ird.y, ird.z, 0.f);
+		__m128 _bmin = _mm_setr_ps(bmin.x, bmin.y, bmin.z, 0.f);
+		__m128 _bmax = _mm_setr_ps(bmax.x, bmax.y, bmax.z, 0.f);
+
+		__m128 t1 = _mm_mul_ps(_mm_sub_ps(_bmin, _r0), _ird);
+		__m128 t2 = _mm_mul_ps(_mm_sub_ps(_bmax, _r0), _ird);
+		
+		float vmax[4ull], vmin[4ull];
+		_mm_store_ps(vmax, _mm_max_ps(t1, t2));
+		_mm_store_ps(vmin, _mm_min_ps(t1, t2));
+		
+		float tmax = glm::min(vmax[0], glm::min(vmax[1], vmax[2]));
+		float tmin = glm::max(vmin[0], glm::max(vmin[1], vmin[2]));
+		
+		if (tmax >= tmin && tmin < distance && tmax > 0.f)
+			return tmin;
+		
+		return std::numeric_limits<float>::max();
+	}
+
 	// Triangle intersect
 
-	inline bool ray_triangle_intersect_impl_sse(const __m128& r0, const __m128& rd, const __m128& v0, const __m128& v1, const __m128& v2, float& distance, glm::vec3& barycentric)
+	inline bool ray_triangle_intersect_test(const glm::vec3& r0, const glm::vec3& rd, const glm::vec3& n0, const float& d0, const glm::vec3& n1, const float& d1, const glm::vec3& n2, const float& d2, float& distance, glm::vec3& barycentric)
+	{
+		// intersection
+		//float det = glm::dot(n0, rd);
+		//float dett = d0 - glm::dot(r0, n0);
+		//
+		//auto wr = (r0 * det) + (rd * dett);
+		//barycentric.y = glm::dot(wr, n1) + det * d1;
+		//barycentric.z = glm::dot(wr, n2) + det * d2;
+		//
+		//float tmpdet0 = det - barycentric.y - barycentric.z;
+		//
+		//int pdet0 = (int)tmpdet0;
+		//int pdetu = (int)barycentric.y;
+		//int pdetv = (int)barycentric.z;
+		//
+		//pdet0 = pdet0 ^ pdetu;
+		//pdet0 = pdet0 | (pdetu ^ pdetv);
+		//if (pdet0 & 0x80000000)
+		//	return false;
+		//
+		//float rdet = 1.f / det;
+		//barycentric.y *= rdet;
+		//barycentric.z *= rdet;
+		//barycentric.x = 1.f - barycentric.y - barycentric.z;
+		//distance = dett * rdet;
+		//
+		//return true;
+		static const __m128 int_coef = _mm_setr_ps(-1.f, -1.f, -1.f, 1.f);
+		
+		const __m128 o = _mm_setr_ps(r0.x, r0.y, r0.z, 0.f);
+		const __m128 d = _mm_setr_ps(rd.x, rd.y, rd.z, 0.f);
+		const __m128 n = _mm_setr_ps(n0.x, n0.y, n0.z, d0);
+		
+		const __m128 det = _mm_dp_ps(n, d, 0x7f);
+		const __m128 dett = _mm_dp_ps(_mm_mul_ps(int_coef, n), o, 0xff);
+		
+		const __m128 oldt = _mm_load_ss(&distance);
+		
+		if ((_mm_movemask_ps(_mm_xor_ps(dett, _mm_sub_ss(_mm_mul_ss(oldt, det), dett))) & 1) == 0)
+		{
+			const __m128 detp = _mm_add_ps(_mm_mul_ps(o, det), _mm_mul_ps(dett, d));
+			const __m128 detu = _mm_dp_ps(detp, _mm_setr_ps(n1.x, n1.y, n1.z, d1), 0xf1);
+			if ((_mm_movemask_ps(_mm_xor_ps(detu, _mm_sub_ss(det, detu))) & 1) == 0)
+			{
+				const __m128 detv = _mm_dp_ps(detp, _mm_setr_ps(n2.x, n2.y, n2.z, d2), 0xf1);
+				if ((_mm_movemask_ps(_mm_xor_ps(detv, _mm_sub_ss(det, _mm_add_ss(detu, detv)))) & 1) == 0)
+				{
+					const __m128 inv_det = _mm_div_ss(_mm_set_ps1(1.f), det);
+					_mm_store_ss(&distance, _mm_mul_ss(dett, inv_det));
+					_mm_store_ss(&barycentric.y, _mm_mul_ss(detu, inv_det));
+					_mm_store_ss(&barycentric.z, _mm_mul_ss(detv, inv_det));
+					barycentric.x = 1.f - barycentric.y - barycentric.z;
+					//_mm_store_ps(&h.px, _mm_mul_ps(detp, _mm_shuffle_ps(inv_det, inv_det, 0)));
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	inline bool ray_triangle_intersect(const __m128& r0, const __m128& rd, const __m128& v0, const __m128& v1, const __m128& v2, float& distance, __m128& bx, __m128& by, __m128& bz)
 	{
 		__m128 e0 = _mm_sub_ps(v1, v0);
 		__m128 e1 = _mm_sub_ps(v2, v0);
@@ -179,31 +293,34 @@ namespace math
 		__m128 inv_det = _mm_div_ss(_mm_set_ps1(1.f), det);
 
 		__m128 tvec = _mm_sub_ps(r0, v0);
-		barycentric.y = _mm_cvtss_f32(_mm_mul_ss(_vec128_dot_product(tvec, pvec), inv_det));
+		by = _mm_mul_ss(_vec128_dot_product(tvec, pvec), inv_det);
 
-		if (barycentric.y < 0.f || barycentric.y > 1.f)
+		auto bcy = _mm_cvtss_f32(by);
+		if (bcy < 0.f || bcy > 1.f)
 			return false;
 
 		__m128 qvec = _vec128_cross(tvec, e0);
-		barycentric.z = _mm_cvtss_f32(_mm_mul_ss(_vec128_dot_product(rd, qvec), inv_det));
+		bz = _mm_mul_ss(_vec128_dot_product(rd, qvec), inv_det);
 
-		if (barycentric.z < 0.f || barycentric.y + barycentric.z > 1.f)
+		if (auto bcz = _mm_cvtss_f32(bz); bcz < 0.f || bcy + bcz > 1.f)
 			return false;
 
-		barycentric.x = 1.f - barycentric.y - barycentric.z;
+		by = _mm_shuffle_ps(by, by, _MM_SHUFFLE(0, 0, 0, 0));
+		bz = _mm_shuffle_ps(bz, bz, _MM_SHUFFLE(0, 0, 0, 0));
+		bx = _mm_sub_ps(_mm_setr_ps(1.f, 1.f, 1.f, 1.f), _mm_sub_ps(by, bz));
 
-		distance = _mm_cvtss_f32(_mm_mul_ss(_vec128_dot_product(e1, qvec), inv_det));
+		_mm_store_ss(&distance, _mm_mul_ss(_vec128_dot_product(e1, qvec), inv_det));
 
 		return true;
 	}
 
-	inline bool ray_triangle_intersect_impl_base(const glm::vec3& r0, const glm::vec3& rd, const glm::vec3& v0, const glm::vec3& v1, const glm::vec3& v2, float& distance, glm::vec3& barycentric)
+	inline bool ray_triangle_intersect(const glm::vec3& r0, const glm::vec3& rd, const glm::vec3& v0, const glm::vec3& v1, const glm::vec3& v2, float& distance, glm::vec3& barycentric)
 	{
 		auto e0 = v1 - v0;
 		auto e1 = v2 - v0;
 
 		auto pvec = glm::cross(rd, e1);
-		auto det = glm::dot(e0, pvec);
+		auto det = dot(e0, pvec);
 
 		if (det < std::numeric_limits<float>::epsilon())
 			return false;
@@ -211,35 +328,21 @@ namespace math
 		auto inv_det = 1.f / det;
 
 		auto tvec = r0 - v0;
-		barycentric.y = glm::dot(tvec, pvec) * inv_det;
+		barycentric.y = dot(tvec, pvec) * inv_det;
 
 		if (barycentric.y < 0.f || barycentric.y > 1.f)
 			return false;
 
 		auto qvec = glm::cross(tvec, e0);
-		barycentric.z = glm::dot(rd, qvec) * inv_det;
+		barycentric.z = dot(rd, qvec) * inv_det;
 
 		if (barycentric.z < 0.f || barycentric.y + barycentric.z > 1.f)
 			return false;
 
 		barycentric.x = 1.f - barycentric.y - barycentric.z;
 
-		distance = glm::dot(e1, qvec) * inv_det;
+		distance = dot(e1, qvec) * inv_det;
 
 		return true;
-	}
-
-	inline bool ray_triangle_intersect(const glm::vec3& r0, const glm::vec3& rd, const glm::vec3& v0, const glm::vec3& v1, const glm::vec3& v2, float& distance, glm::vec3& barycentric)
-	{
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_INTERSECTION)
-		auto _r0 = _mm_setr_ps(r0.x, r0.y, r0.z, 0.f);
-		auto _rd = _mm_setr_ps(rd.x, rd.y, rd.z, 0.f);
-		auto _v0 = _mm_setr_ps(v0.x, v0.y, v0.z, 0.f);
-		auto _v1 = _mm_setr_ps(v1.x, v1.y, v1.z, 0.f);
-		auto _v2 = _mm_setr_ps(v2.x, v2.y, v2.z, 0.f);
-		return ray_triangle_intersect_impl_sse(_r0, _rd, _v0, _v1, _v2, distance, barycentric);
-#else
-		return ray_triangle_intersect_impl_base(r0, rd, v0, v1, v2, distance, barycentric);
-#endif
 	}
 }

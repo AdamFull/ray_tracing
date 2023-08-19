@@ -28,7 +28,7 @@ public:
 	CScene(CResourceManager* resource_manager);
 	~CScene();
 
-	void create(const std::filesystem::path& scenepath, resource_id_t brdf_lut);
+	void create(const std::filesystem::path& scenepath);
 	void build_acceleration();
 
 	bool trace_ray(const FRay& ray, float t_min, float t_max, FHitResult& hit_result);
@@ -58,9 +58,6 @@ private:
 	std::vector<resource_id_t> m_vSamplerIds{};
 	std::vector<resource_id_t> m_vTextureIds{};
 	std::vector<resource_id_t> m_vMaterialIds{};
-
-	resource_id_t m_brdf_lut_id{ invalid_index };
-	resource_id_t m_sceneVBO{ invalid_index };
 
 	std::filesystem::path m_parentPath{};
 

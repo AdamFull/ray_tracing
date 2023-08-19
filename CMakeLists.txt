@@ -8,12 +8,17 @@ file(GLOB ENGINE_SOURCE_FILES ray_tracer/*.cpp ray_tracer/*.hpp)
 
 find_package(benchmark CONFIG REQUIRED)
 
+enable_language(ASM_MASM)
+
+#add_library(math_x86_64 OBJECT ray_tracer/math_x86_64.asm)
+
 add_executable(${PROJECT_NAME} 
     main.cpp 
     ${ECS_SOURCE_FILES} 
     ${RENDER_SOURCE_FILES} 
     ${RESOURCES_SOURCE_FILES} 
     ${ENGINE_SOURCE_FILES}
+    ${CMAKE_CURRENT_SOURCE_DIR}/ray_tracer/math_x86_64.asm
 )
 
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_20)
@@ -28,6 +33,8 @@ ${CMAKE_CURRENT_SOURCE_DIR}/
 ${CMAKE_CURRENT_SOURCE_DIR}/ray_tracer/
 ${CMAKE_CURRENT_SOURCE_DIR}/ray_tracer/lib/glm
 )
+
+target_compile_options(${PROJECT_NAME} PRIVATE "/fp:fast")
 
 target_compile_definitions(${PROJECT_NAME} PUBLIC
     GLM_FORCE_PURE

@@ -8,5 +8,6 @@ struct FVertex
 	glm::vec3 m_color{};
 	glm::vec3 m_position{};
 	glm::vec3 m_normal{};
+	glm::vec4 m_tangent{};
 	glm::vec2 m_texcoord{};
 };

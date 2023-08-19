@@ -89,14 +89,10 @@ CScene::~CScene()
 	m_pBVHTree = nullptr;
 }
 
-void CScene::create(const std::filesystem::path& scenepath, resource_id_t brdf_lut)
+void CScene::create(const std::filesystem::path& scenepath)
 {
-	m_brdf_lut_id = brdf_lut;
-
 	// Create root node
 	m_root = create_node(m_registry, "scene_root");
-
-	m_sceneVBO = m_pResourceManager->add_vertex_buffer(scenepath.string());
 
 	m_parentPath = scenepath.parent_path();
 
@@ -276,7 +272,8 @@ void CScene::load_materials(const tinygltf::Model& model)
 		if (mat.additionalValues.find("emissiveFactor") != mat.additionalValues.end())
 		{
 			material_ci.m_emissiveFactor = glm::make_vec3(mat.additionalValues.at("emissiveFactor").ColorFactor().data());
-			is_emissive = true;
+			if(material_ci.m_emissiveFactor != glm::vec3(0.f))
+				is_emissive = true;
 		}
 
 		if (mat.values.find("roughnessFactor") != mat.values.end())
@@ -323,10 +320,7 @@ void CScene::load_materials(const tinygltf::Model& model)
 		if (is_emissive)
 			new_material = std::make_unique<CEmissiveMaterial>(m_pResourceManager);
 		else if (is_metallicRoughness)
-		{
 			new_material = std::make_unique<CMetalRoughnessMaterial>(m_pResourceManager);
-			material_ci.m_textures.emplace(ETextureType::eBRDFLut, m_brdf_lut_id);
-		}
 		else
 			new_material = std::make_unique<CLambertianMaterial>(m_pResourceManager);
 
@@ -391,8 +385,6 @@ void CScene::load_node(const entt::entity& parent, const tinygltf::Node& node, u
 
 void CScene::load_mesh_component(const entt::entity& target, const tinygltf::Node& node, const tinygltf::Model& model)
 {
-	auto& vbo = m_pResourceManager->get_vertex_buffer(m_sceneVBO);
-
 	const tinygltf::Mesh& mesh = model.meshes[node.mesh];
 
 	for (size_t j = 0; j < mesh.primitives.size(); j++)
@@ -402,12 +394,12 @@ void CScene::load_mesh_component(const entt::entity& target, const tinygltf::Nod
 
 		const tinygltf::Primitive& primitive = mesh.primitives[j];
 
-		uint32_t indexStart = static_cast<uint32_t>(vbo->get_last_index());
-		uint32_t vertexStart = static_cast<uint32_t>(vbo->get_last_vertex());
+		uint32_t indexStart = static_cast<uint32_t>(0);
+		uint32_t vertexStart = static_cast<uint32_t>(0);
 		uint32_t indexCount = 0;
 		uint32_t vertexCount = 0;
 
-		bool bHasNormals{ false };
+		bool bHasNormals{ false }, bHasTangents{ false };
 
 		// Vertices
 		{
@@ -453,13 +445,22 @@ void CScene::load_mesh_component(const entt::entity& target, const tinygltf::Nod
 				bufferColors = reinterpret_cast<const float*>(&(model.buffers[colorView.buffer].data[colorAccessor.byteOffset + colorView.byteOffset]));
 			}
 
+			if (primitive.attributes.find("TANGENT") != primitive.attributes.end())
+			{
+				const tinygltf::Accessor& tangentAccessor = model.accessors[primitive.attributes.find("TANGENT")->second];
+				const tinygltf::BufferView& tangentView = model.bufferViews[tangentAccessor.bufferView];
+				bufferTangents = reinterpret_cast<const float*>(&(model.buffers[tangentView.buffer].data[tangentAccessor.byteOffset + tangentView.byteOffset]));
+				bHasTangents = true;
+			}
+
 			vertexCount = static_cast<uint32_t>(posAccessor.count);
 
 			for (size_t v = 0; v < posAccessor.count; v++)
 			{
 				FVertex vert{};
 				vert.m_position = glm::make_vec3(&bufferPos[v * 3]);
-				vert.m_normal = glm::normalize(glm::vec3(bufferNormals ? glm::make_vec3(&bufferNormals[v * 3]) : glm::vec3(0.0f)));
+				vert.m_normal = math::normalize(glm::vec3(bufferNormals ? glm::make_vec3(&bufferNormals[v * 3]) : glm::vec3(0.0f)));
+				vert.m_tangent = bufferTangents ? glm::vec4(glm::make_vec4(&bufferTangents[v * 4])) : glm::vec4(0.0f);
 
 				vert.m_texcoord = bufferTexCoords ? glm::make_vec2(&bufferTexCoords[v * 2]) : glm::vec2(0.0f);
 				if (bufferColors)
@@ -535,6 +536,59 @@ void CScene::load_mesh_component(const entt::entity& target, const tinygltf::Nod
 		// Attaching materials
 		if (!m_vMaterialIds.empty())
 			material_id = primitive.material != invalid_index ? m_vMaterialIds.at(primitive.material) : m_vMaterialIds.back();
+
+		// Calculate tangent
+		if (!bHasTangents)
+		{
+			std::vector<glm::vec3> subtangents{};
+			subtangents.resize(vertexBuffer.size());
+
+			for (uint32_t index = 0u; index < indexBuffer.size(); index += 3u)
+			{
+				auto i0 = indexBuffer.at(index);
+				auto i1 = indexBuffer.at(index + 1u);
+				auto i2 = indexBuffer.at(index + 2u);
+
+				auto& v0 = vertexBuffer.at(i0);
+				auto& v1 = vertexBuffer.at(i1);
+				auto& v2 = vertexBuffer.at(i2);
+
+				auto edge1 = v1.m_position - v0.m_position;
+				auto edge2 = v2.m_position - v0.m_position;
+
+				glm::vec2 deltaUV1 = v1.m_texcoord - v0.m_texcoord;
+				glm::vec2 deltaUV2 = v2.m_texcoord - v0.m_texcoord;
+
+				float f = 1.0f / (deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y);
+
+				glm::vec4 tangent;
+				tangent.x = f * (deltaUV2.y * edge1.x - deltaUV1.y * edge2.x);
+				tangent.y = f * (deltaUV2.y * edge1.y - deltaUV1.y * edge2.y);
+				tangent.z = f * (deltaUV2.y * edge1.z - deltaUV1.y * edge2.z);
+				tangent.w = 0.f;
+
+				v0.m_tangent += tangent;
+				v1.m_tangent += tangent;
+				v2.m_tangent += tangent;
+
+				glm::vec3 tangent_2;
+				tangent_2.x = f * (deltaUV1.x * edge2.x - deltaUV2.x * edge1.x);
+				tangent_2.y = f * (deltaUV1.x * edge2.y - deltaUV2.x * edge1.y);
+				tangent_2.z = f * (deltaUV1.x * edge2.z - deltaUV2.x * edge1.z);
+
+				subtangents[i0] += tangent_2;
+				subtangents[i1] += tangent_2;
+				subtangents[i2] += tangent_2;
+			}
+
+			for (size_t index = 0ull; index < vertexBuffer.size(); ++index)
+			{
+				auto& vert = vertexBuffer[index];
+				glm::vec3 t = math::normalize(vert.m_tangent);
+				vert.m_tangent = glm::vec4(math::normalize(t - vert.m_normal * math::dot(vert.m_normal, t)), 0.f);
+				vert.m_tangent.w = math::dot(glm::cross(vert.m_normal, subtangents[index]), t) < 0.f ? -1.f : 1.f;
+			}
+		}
 
 		for (uint32_t index = 0u; index < indexBuffer.size(); index += 3u)
 		{

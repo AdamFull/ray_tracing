@@ -1,6 +1,6 @@
 #pragma once
 
-inline uint32_t pack_color_u32(const glm::vec4& color)
+inline uint32_t pack_rgba(const glm::vec4& color)
 {
 	uint32_t r = static_cast<uint32_t>(glm::clamp(color.x, 0.f, 1.f) * 255.f) & 0xFFu;
 	uint32_t g = static_cast<uint32_t>(glm::clamp(color.y, 0.f, 1.f) * 255.f) & 0xFFu;

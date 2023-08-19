@@ -18,6 +18,7 @@ public:
 
 private:
 	FAxixAlignedBoundingBox m_aabb{};
+
 	FVertex m_v0, m_v1, m_v2;
 	glm::vec3 m_centroid{};
 	glm::mat3 m_normal{ 1.f };

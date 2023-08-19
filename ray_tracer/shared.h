@@ -45,7 +45,7 @@ struct FHitResult
 
 	inline void set_face_normal(const FRay& ray, const glm::vec3& outward_normal)
 	{
-		m_bFrontFace = glm::dot(ray.m_direction, outward_normal) < 0.f;
-		m_normal = glm::normalize(m_bFrontFace ? outward_normal : outward_normal * -1.f);
+		m_bFrontFace = math::dot(ray.m_direction, outward_normal) < 0.f;
+		m_normal = math::normalize(m_bFrontFace ? outward_normal : outward_normal * -1.f);
 	}
 };

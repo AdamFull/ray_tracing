@@ -5,10 +5,10 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/quaternion.hpp>
 
-#define USE_INTRINSICS
+//#define USE_INTRINSICS
 //#define USE_INTRINSICS_BASIC_ARITHMETIC
 //#define USE_INTRINSICS_OPERATIONS
-#define USE_INTRINSICS_INTERSECTION
+//#define USE_INTRINSICS_INTERSECTION
 
 #include "math.hpp"
 

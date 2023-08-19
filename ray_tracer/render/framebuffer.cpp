@@ -54,8 +54,8 @@ void CFramebuffer::present()
 		{
 			auto sampling_factor = 1.f / static_cast<float>(m_uSamples);
 			auto color = get_pixel(x, y) * sampling_factor;
-			color = glm::sqrt(color);
-			image->set_pixel(x, m_dimensions.y - y - 1u, pack_color_u32(color));
+			color = glm::vec4(math::fsqrt(color.x), math::fsqrt(color.y), math::fsqrt(color.z), math::fsqrt(color.w));
+			image->set_pixel(x, m_dimensions.y - y - 1u, pack_rgba(color));
 		}
 	}
 }

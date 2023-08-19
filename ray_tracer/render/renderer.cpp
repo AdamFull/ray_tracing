@@ -7,7 +7,7 @@
 
 glm::vec3 ray_color(const FRay& ray)
 {
-	auto direction = glm::normalize(ray.m_direction);
+	auto direction = math::normalize(ray.m_direction);
 	auto t = 0.5f * (direction.y + 1.0f);
 	return glm::vec3(glm::vec3(1.f, 1.f, 1.f) * (1.f - t) + glm::vec3(0.5f, 0.7f, 1.f) * t); // day
 	//return glm::vec3(glm::vec3(0.01f, 0.01f, 0.03f) * (1.f - t) + glm::vec3(0.0f, 0.0f, 0.0f) * t); // night
@@ -33,31 +33,34 @@ void CRenderCore::create(uint32_t width, uint32_t heigth, uint32_t samples, uint
 
 void CRenderCore::trace_ray(CScene* scene, FCameraComponent* camera, const glm::vec3& origin)
 {
-	for (uint32_t sample = 1u; sample <= m_sampleCount; ++sample)
-	{
-		auto start = std::chrono::high_resolution_clock::now();
+	//for (uint32_t sample = 1u; sample <= m_sampleCount; ++sample)
+	//{
+	//	auto start = std::chrono::high_resolution_clock::now();
 
-		std::for_each(std::execution::par_unseq, m_pixelIterator.begin(), m_pixelIterator.end(),
+	for(uint32_t sample = 0u; sample < m_sampleCount; ++sample)
+		m_pFramebuffer->increment_sample_count();
+
+		std::for_each(std::execution::par, m_pixelIterator.begin(), m_pixelIterator.end(),
 			[this, scene, camera, &origin](uint32_t index)
 			{
 				trace_ray(scene, camera, origin, index);
 			});
 
-		auto end = std::chrono::high_resolution_clock::now();
-		auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-		std::cout << std::format("Frame {}: time {} ms\n", sample, duration);
-
-		m_pFramebuffer->increment_sample_count();
-
-		if (sample % 5u == 0u)
-		{
-			m_pFramebuffer->present();
-			
-			auto image_id = m_pFramebuffer->get_image();
-			auto& image = m_pResourceManager->get_image(image_id);
-			image->save(std::format("image_{}s.png", sample));
-		}
-	}
+	//	auto end = std::chrono::high_resolution_clock::now();
+	//	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+	//	std::cout << std::format("Frame {}: time {} ms\n", sample, duration);
+	//
+	//	m_pFramebuffer->increment_sample_count();
+	//
+	//	if (sample % 5u == 0u)
+	//	{
+	//		m_pFramebuffer->present();
+	//		
+	//		auto image_id = m_pFramebuffer->get_image();
+	//		auto& image = m_pResourceManager->get_image(image_id);
+	//		image->save(std::format("image_{}s.png", sample));
+	//	}
+	//}
 }
 
 void CRenderCore::trace_ray(CScene* scene, FCameraComponent* camera, const glm::vec3& origin, uint32_t ray_index)
@@ -67,12 +70,19 @@ void CRenderCore::trace_ray(CScene* scene, FCameraComponent* camera, const glm::
 	auto x = ray_index % viewport_extent.x;
 	auto y = ray_index / viewport_extent.x;
 
+	if (x == 450 && y == 360)
+		int iiiiii = 0;
+
 	auto& ray_direction = camera->m_vRayDirections[ray_index];
 
-	FRay ray{};
-	ray.m_origin = origin;
-	ray.set_direction(ray_direction + random_vec3(-0.0001f, 0.0001f));
-	m_pFramebuffer->add_pixel(x, y, glm::vec4(hit_pixel(scene, ray, m_bounceCount), 1.f));
+	for (uint32_t sample = 1u; sample <= m_sampleCount; ++sample)
+	{
+		FRay ray{};
+		ray.m_origin = origin;
+		//ray.set_direction(ray_direction + random_vec3(-0.0001f, 0.0001f));
+		ray.set_direction(ray_direction);
+		m_pFramebuffer->add_pixel(x, y, glm::vec4(hit_pixel(scene, ray, m_bounceCount), 1.f));
+	}
 }
 
 glm::vec3 CRenderCore::hit_pixel(CScene* scene, FRay ray, int32_t bounces)

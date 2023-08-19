@@ -31,54 +31,63 @@ void CTriangle::create()
 
 bool CTriangle::hit(const FRay& ray, float t_min, float t_max, FHitResult& hit_result) const
 {
-	glm::vec3 barycentric{};
-	float dist{ 0.f };
-	if (math::ray_triangle_intersect(ray.m_origin, ray.m_direction, m_v0.m_position, m_v1.m_position, m_v2.m_position, dist, barycentric))
+	float dist{ hit_result.m_distance };
+#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_INTERSECTION) && 0
+	auto _r0 = _mm_setr_ps(ray.m_origin.x, ray.m_origin.y, ray.m_origin.z, 0.f);
+	auto _rd = _mm_setr_ps(ray.m_direction.x, ray.m_direction.y, ray.m_direction.z, 0.f);
+	auto _p0 = _mm_setr_ps(m_v0.m_position.x, m_v0.m_position.y, m_v0.m_position.z, 0.f);
+	auto _p1 = _mm_setr_ps(m_v1.m_position.x, m_v1.m_position.y, m_v1.m_position.z, 0.f);
+	auto _p2 = _mm_setr_ps(m_v2.m_position.x, m_v2.m_position.y, m_v2.m_position.z, 0.f);
+
+	__m128 _bcX, _bcY, _bcZ;
+	if (math::ray_triangle_intersect(_r0, _rd, _p0, _p1, _p2, dist, _bcX, _bcY, _bcZ))
 	{
 		if (dist >= t_min && dist <= t_max)
 		{
 			hit_result.m_distance = dist;
 			hit_result.m_position = ray.at(dist);
 
-			// Calculating color
-			//hit_result.m_color = glm::interpolate(m_v0.color, m_v1.color, m_v2.color, barycentric);
-			hit_result.m_color = barycentric.x * m_v0.m_color + barycentric.y * m_v1.m_color + barycentric.z * m_v2.m_color;
+			// Interpolate color
+			__m128 _c0 = _mm_setr_ps(m_v0.m_color.x, m_v0.m_color.y, m_v0.m_color.z, 0.f);
+			__m128 _c1 = _mm_setr_ps(m_v1.m_color.x, m_v1.m_color.y, m_v1.m_color.z, 0.f);
+			__m128 _c2 = _mm_setr_ps(m_v2.m_color.x, m_v2.m_color.y, m_v2.m_color.z, 0.f);
+			__m128 _rc = _mm_add_ps(_mm_mul_ps(_bcX, _c0), _mm_add_ps(_mm_mul_ps(_bcY, _c1), _mm_mul_ps(_bcZ, _c2)));
 
-			// Calculating normal
-			//auto outward_normal = glm::interpolate(m_v0.normal, m_v1.normal, m_v2.normal, barycentric);
-			auto outward_normal = barycentric.x * m_v0.m_normal + barycentric.y * m_v1.m_normal + barycentric.z * m_v2.m_normal;
-			outward_normal = glm::normalize(m_normal * outward_normal);
-			hit_result.set_face_normal(ray, outward_normal);
+			float _color[4ull];
+			_mm_storeu_ps(_color, _rc);
+			hit_result.m_color = glm::vec3(_color[0ull], _color[1ull], _color[2ull]);
 
-			// Calculating texture coordinates
-			hit_result.m_texcoord = barycentric.x * m_v0.m_texcoord + barycentric.y * m_v1.m_texcoord + barycentric.z * m_v2.m_texcoord;
+			// Load normal matrix
+			__m128 _nmr0 = _mm_setr_ps(m_normal[0].x, m_normal[0].y, m_normal[0].z, 0.f);
+			__m128 _nmr1 = _mm_setr_ps(m_normal[1].x, m_normal[1].y, m_normal[1].z, 0.f);
+			__m128 _nmr2 = _mm_setr_ps(m_normal[2].x, m_normal[2].y, m_normal[2].z, 0.f);
 
-			// Calculate tangent
-			glm::vec2 deltaUV1 = m_v1.m_texcoord - m_v0.m_texcoord;
-			glm::vec2 deltaUV2 = m_v2.m_texcoord - m_v0.m_texcoord;
-			float f = 1.0f / (deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y);
+			// Interpolate normals
+			__m128 _n0 = _mm_setr_ps(m_v0.m_normal.x, m_v0.m_normal.y, m_v0.m_normal.z, 0.f);
+			__m128 _n1 = _mm_setr_ps(m_v1.m_normal.x, m_v1.m_normal.y, m_v1.m_normal.z, 0.f);
+			__m128 _n2 = _mm_setr_ps(m_v2.m_normal.x, m_v2.m_normal.y, m_v2.m_normal.z, 0.f);
+			__m128 _rn = _mm_add_ps(_mm_mul_ps(_bcX, _n0), _mm_add_ps(_mm_mul_ps(_bcY, _n1), _mm_mul_ps(_bcZ, _n2)));
+			_rn = math::_vec128_normalize(math::_mul_vec_to_mat(_rn, _nmr0, _nmr1, _nmr2));
 
-			glm::vec3 edge1 = m_v1.m_position - m_v0.m_position;
-			glm::vec3 edge2 = m_v2.m_position - m_v0.m_position;
-			glm::vec3 tangent;
+			__m128 _t0 = _mm_setr_ps(m_v0.m_tangent.x, m_v0.m_tangent.y, m_v0.m_tangent.z, 0.f);
+			__m128 _t1 = _mm_setr_ps(m_v1.m_tangent.x, m_v1.m_tangent.y, m_v1.m_tangent.z, 0.f);
+			__m128 _t2 = _mm_setr_ps(m_v2.m_tangent.x, m_v2.m_tangent.y, m_v2.m_tangent.z, 0.f);
+			__m128 _tg = _mm_add_ps(_mm_mul_ps(_bcX, _t0), _mm_add_ps(_mm_mul_ps(_bcY, _t1), _mm_mul_ps(_bcZ, _t2)));
+			_tg = math::_vec128_normalize(math::_mul_vec_to_mat(_tg, _nmr0, _nmr1, _nmr2));
 
-			tangent.x = f * (deltaUV2.y * edge1.x - deltaUV1.y * edge2.x);
-			tangent.y = f * (deltaUV2.y * edge1.y - deltaUV1.y * edge2.y);
-			tangent.z = f * (deltaUV2.y * edge1.z - deltaUV1.y * edge2.z);
+			__m128 _bt = math::_vec128_cross(_rn, _tg);
 
-			tangent = glm::normalize(tangent);
-			//hit_result.m_tangent = glm::interpolate(tangent, tangent, tangent, barycentric);
-			hit_result.m_tangent = barycentric.x * tangent + barycentric.y * tangent + barycentric.z * tangent;
-			hit_result.m_tangent = glm::normalize(m_normal * hit_result.m_tangent);
-			hit_result.m_tangent = glm::normalize(hit_result.m_tangent - glm::dot(hit_result.m_tangent, hit_result.m_normal) * hit_result.m_normal);
+			float _normal[4ull];
+			_mm_storeu_ps(_normal, _rn);
+			hit_result.set_face_normal(ray, glm::vec3(_normal[0ull], _normal[1ull], _normal[2ull]));
 
-			hit_result.m_bitangent = glm::cross(hit_result.m_normal, hit_result.m_tangent);
+			float _tangentr[4ull];
+			_mm_storeu_ps(_tangentr, _tg);
+			hit_result.m_tangent = glm::vec3(_tangentr[0ull], _tangentr[1ull], _tangentr[2ull]);
 
-			if (glm::dot(glm::cross(hit_result.m_normal, hit_result.m_tangent), hit_result.m_bitangent) < 0.f)
-			{
-				hit_result.m_tangent = hit_result.m_tangent * -1.f;
-				hit_result.m_bitangent = hit_result.m_bitangent * -1.f;
-			}
+			float _bitangent[4ull];
+			_mm_storeu_ps(_bitangent, _bt);
+			hit_result.m_bitangent = glm::vec3(_bitangent[0ull], _bitangent[1ull], _bitangent[2ull]);
 
 			// Set material
 			hit_result.m_material_id = m_material_id;
@@ -86,6 +95,40 @@ bool CTriangle::hit(const FRay& ray, float t_min, float t_max, FHitResult& hit_r
 			return true;
 		}
 	}
+#else
+	glm::vec3 barycentric{};
+	//if (math::ray_triangle_intersect_test(ray.m_origin, ray.m_direction, n0, d0, n1, d1, n2, d2, dist, barycentric))
+	if(math::ray_triangle_intersect(ray.m_origin, ray.m_direction, m_v0.m_position, m_v1.m_position, m_v2.m_position, dist, barycentric))
+	{
+		if (dist >= t_min && dist <= t_max)
+		{
+			hit_result.m_distance = dist;
+			hit_result.m_position = ray.at(dist);
+
+			// Calculating color
+			hit_result.m_color = barycentric.x * m_v0.m_color + barycentric.y * m_v1.m_color + barycentric.z * m_v2.m_color;
+
+			// Calculating normal
+			auto outward_normal = barycentric.x * m_v0.m_normal + barycentric.y * m_v1.m_normal + barycentric.z * m_v2.m_normal;
+			outward_normal = math::normalize(m_normal * outward_normal);
+			hit_result.set_face_normal(ray, outward_normal);
+
+			// Calculating texture coordinates
+			hit_result.m_texcoord = barycentric.x * m_v0.m_texcoord + barycentric.y * m_v1.m_texcoord + barycentric.z * m_v2.m_texcoord;
+
+			auto tangent = barycentric.x * m_v0.m_tangent + barycentric.y * m_v1.m_tangent + barycentric.z * m_v2.m_tangent;
+			tangent = glm::vec4(math::normalize(m_normal * glm::vec3(tangent)), tangent.w);
+			hit_result.m_tangent = glm::vec3(tangent);
+
+			hit_result.m_bitangent = math::normalize(glm::cross(hit_result.m_normal, glm::vec3(tangent)) * tangent.w);
+
+			// Set material
+			hit_result.m_material_id = m_material_id;
+
+			return true;
+		}
+	}
+#endif
 
 	return false;
 }

@@ -38,7 +38,7 @@ inline glm::vec3 random_vec3(float min, float max)
 
 inline glm::vec3 random_unit_vec3()
 {
-	return glm::normalize(random_vec3(-1.f, 1.f));
+	return math::normalize(random_vec3(-1.f, 1.f));
 }
 
 template<class _Ty>
@@ -59,11 +59,11 @@ inline glm::vec3 random_cosine_direction()
 {
 	auto r1 = random<float>();
 	auto r2 = random<float>();
-	auto z = glm::sqrt(1.f - r2);
+	auto z = math::fsqrt(1.f - r2);
 
 	auto phi = 2.f * std::numbers::pi_v<float> * r1;
-	auto x = glm::cos(phi) * glm::sqrt(r2);
-	auto y = glm::sin(phi) * glm::sqrt(r2);
+	auto x = glm::cos(phi) * math::fsqrt(r2);
+	auto y = glm::sin(phi) * math::fsqrt(r2);
 
 	return glm::vec3(x, y, z);
 }
