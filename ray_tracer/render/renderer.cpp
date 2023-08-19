@@ -79,8 +79,7 @@ void CRenderCore::trace_ray(CScene* scene, FCameraComponent* camera, const glm::
 	{
 		FRay ray{};
 		ray.m_origin = origin;
-		//ray.set_direction(ray_direction + random_vec3(-0.0001f, 0.0001f));
-		ray.set_direction(ray_direction);
+		ray.set_direction(ray_direction + random_vec3(-0.0001f, 0.0001f));
 		m_pFramebuffer->add_pixel(x, y, glm::vec4(hit_pixel(scene, ray, m_bounceCount), 1.f));
 	}
 }
@@ -97,12 +96,16 @@ glm::vec3 CRenderCore::hit_pixel(CScene* scene, FRay ray, int32_t bounces)
 	auto& material = m_pResourceManager->get_material(hit_result.m_material_id);
 
 	float pdf{};
+	float alpha{ 1.f };
 	glm::vec3 attenuation{};
 	glm::vec3 emitted = material->emit(hit_result);
 
 	FRay scattered{};
-	if (!material->scatter(ray, hit_result, attenuation, scattered, pdf))
+	if (!material->scatter(ray, hit_result, attenuation, scattered, pdf, alpha))
 		return emitted;
+
+	if(!math::compare_float(alpha, 1.f))
+		return emitted + hit_pixel(scene, scattered, bounces - 1);
 
 	//return emitted + attenuation * hit_pixel(scene, scattered, bounces - 1);
 	return emitted + attenuation * hit_pixel(scene, scattered, bounces - 1);

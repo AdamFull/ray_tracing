@@ -31,8 +31,13 @@ inline glm::vec3 F_SchlickR(float cosTheta, glm::vec3 F0, float roughness)
 	return F0 + (glm::max(glm::vec3(1.0f - roughness), F0) - F0) * glm::pow(1.0f - cosTheta, 5.0f);
 }
 
+inline __m128 F_SchlickR_sse(const float cosTheta, const __m128& F0, const float roughness) noexcept
+{
+	return _mm_add_ps(F0, _mm_mul_ps(_mm_sub_ps(_mm_max_ps(_mm_set_ps1(1.f - roughness), F0), F0), _mm_set_ps1(glm::pow(1.0f - cosTheta, 5.0f))));
+}
+
 // Based omn http://byteblacksmith.com/improvements-to-the-canonical-one-liner-glsl-rand-for-opengl-es-2-0/
-inline float random(float x, float y)
+inline float random(float x, float y) noexcept
 {
 	float a = 12.9898f;
 	float b = 78.233f;
@@ -42,29 +47,15 @@ inline float random(float x, float y)
 	return glm::fract(std::sin(sn) * c);
 }
 
-inline glm::vec2 hammersley2d(uint32_t i, uint32_t N)
-{
-	// Radical inverse based on http://holger.dammertz.org/stuff/notes_HammersleyOnHemisphere.html
-	uint32_t bits = (i << 16u) | (i >> 16u);
-	bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
-	bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
-	bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
-	bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
-	float rdi = static_cast<float>(bits) * 2.3283064365386963e-10;
-	return glm::vec2(static_cast<float>(i) / static_cast<float>(N), rdi);
-}
-
 // Based on http://blog.selfshadow.com/publications/s2013-shading-course/karis/s2013_pbs_epic_slides.pdf
-inline glm::vec3 importance_sample_ggx(glm::vec2 Xi, float roughness, glm::vec3 normal)
+inline glm::vec3 importance_sample_ggx(glm::vec2 Xi, float roughness, glm::vec3 normal) noexcept
 {
 	// Maps a 2D point to a hemisphere with spread based on roughness
 	float alpha = roughness * roughness;
-	float phi = 2.0f * std::numbers::pi_v<float> *Xi.x + random(normal.x, normal.z) * 0.1f;
+	float phi = 2.0f * std::numbers::pi_v<float> * Xi.x + random(normal.x, normal.z) * 0.1f;
 	float cosTheta = math::fsqrt((1.0f - Xi.y) / (1.0f + (alpha * alpha - 1.0f) * Xi.y));
 	float sinTheta = math::fsqrt(1.0f - cosTheta * cosTheta);
 
-	// SSE version works better!
-#if defined(USE_INTRINSICS)
 	__m128 _normal = _mm_setr_ps(normal.x, normal.y, normal.z, 0.f);
 
 	// Tangent space
@@ -83,23 +74,50 @@ inline glm::vec3 importance_sample_ggx(glm::vec2 Xi, float roughness, glm::vec3 
 	_mm_storeu_ps(_store, _res);
 
 	return glm::vec3(_store[0ull], _store[1ull], _store[2ull]);
-#else
-	glm::vec3 H = glm::vec3(sinTheta * glm::cos(phi), sinTheta * glm::sin(phi), cosTheta);
-	
-	// Tangent space
-	glm::vec3 up = glm::abs(normal.z) < 0.999 ? glm::vec3(0.0f, 0.0f, 1.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
-	
-	glm::vec3 tangentX = math::normalize(glm::cross(up, normal));
-	glm::vec3 tangentY = math::normalize(glm::cross(normal, tangentX));
-	
-	// Convert to world Space
-	return math::normalize(tangentX * H.x + tangentY * H.y + normal * H.z);
-#endif
+}
+
+inline __m128 mix(const __m128& x, const __m128& y, float a)
+{
+	__m128 _a = _mm_set_ps1(a);
+	return _mm_add_ps(_mm_mul_ps(x, _mm_sub_ps(_mm_set_ps1(1.f), _a)), _mm_mul_ps(y, _a));
 }
 
 // microfacet model developed by Torrance-Sparrow
-inline bool calculate_cook_torrance_color_brdf(glm::vec3& out_color, const glm::vec3& L, const glm::vec3& V, const glm::vec3& N, const glm::vec3 diffuse, float roughness, float metallic)
+inline bool calculate_cook_torrance_color_brdf(glm::vec3& out_color, const glm::vec3& L, const glm::vec3& V, const glm::vec3& N, const glm::vec3 diffuse, float roughness, float metallic) noexcept
 {
+#if 0
+	__m128 _L = _mm_setr_ps(L.x, L.y, L.z, 0.f);
+	__m128 _V = _mm_setr_ps(V.x, V.y, V.z, 0.f);
+	__m128 _N = _mm_setr_ps(N.x, N.y, N.z, 0.f);
+
+	__m128 _H = math::_vec128_normalize(_mm_add_ps(_V, _L));
+	float dotNH = glm::clamp(_mm_cvtss_f32(math::_vec128_dot_product(_N, _H)), 0.f, 1.f);
+	float dotNV = glm::clamp(_mm_cvtss_f32(math::_vec128_dot_product(_N, _V)), 0.f, 1.f);
+	float dotNL = glm::clamp(_mm_cvtss_f32(math::_vec128_dot_product(_N, _L)), 0.f, 1.f);
+
+	if (dotNL > 0.f)
+	{
+		__m128 DG = _mm_set_ps1(D_GGX(dotNH, roughness) * G_SchlicksmithGGX(dotNL, dotNV, roughness));
+
+		__m128 _diffuse = _mm_setr_ps(diffuse.x, diffuse.y, diffuse.z, 0.f);
+
+		__m128 F0 = _mm_set_ps1(0.04f);
+		F0 = mix(F0, _diffuse, metallic);
+
+		__m128 F = F_SchlickR_sse(dotNV, F0, roughness);
+
+		__m128 specular = _mm_div_ps(_mm_mul_ps(DG, F), _mm_set_ps1(4.f * dotNL * dotNV + 0.001f));
+		__m128 kD = _mm_mul_ps(_mm_sub_ps(_mm_set_ps1(1.f), F), _mm_set_ps1(1.0f - metallic));
+
+		__m128 color = _mm_add_ps(_mm_mul_ps(kD, _diffuse), specular);
+
+		float r[4ull];
+		_mm_store_ps(r, color);
+
+		out_color = glm::vec3(r[0ull], r[1ull], r[2ull]);
+		return true;
+	}
+#else
 	glm::vec3 H = math::normalize(V + L);
 	float dotNH = glm::clamp(math::dot(N, H), 0.f, 1.f);
 	float dotNV = glm::clamp(math::dot(N, V), 0.f, 1.f);
@@ -124,46 +142,9 @@ inline bool calculate_cook_torrance_color_brdf(glm::vec3& out_color, const glm::
 
 		return true;
 	}
-
-	return false;
-}
-
-inline glm::vec3 specularContribution(const glm::vec3& diffuse, const glm::vec3& L, const glm::vec3& V, const glm::vec3& N, const glm::vec3& F0, float metallic, float roughness)
-{
-#if defined(USE_INTRINSICS) && 0
-	// Load variables
-	__m128 _L = _mm_setr_ps(L.x, L.y, L.z, 0.f);
-	__m128 _V = _mm_setr_ps(V.x, V.y, V.z, 0.f);
-	__m128 _N = _mm_setr_ps(N.x, N.y, N.z, 0.f);
-
-	__m128 _H = math::_vec128_normalize(_mm_add_ps(_V, _L));
-	float dotNH = glm::clamp(_mm_cvtss_f32(math::_vec128_dot_product(_N, _H)), 0.f, 1.f);
-	float dotNV = glm::clamp(_mm_cvtss_f32(math::_vec128_dot_product(_N, _V)), 0.f, 1.f);
-	float dotNL = glm::clamp(_mm_cvtss_f32(math::_vec128_dot_product(_N, _L)), 0.f, 1.f);
-#else
-
-	glm::vec3 H = math::normalize(V + L);
-	float dotNH = glm::clamp(math::dot(N, H), 0.f, 1.f);
-	float dotNV = glm::clamp(math::dot(N, V), 0.f, 1.f);
-	float dotNL = glm::clamp(math::dot(N, L), 0.f, 1.f);
 #endif
 
-	glm::vec3 out_color{ 0.f };
-
-	if (dotNL > 0.f)
-	{
-		// D = Normal distribution (Distribution of the microfacets)
-		float D = D_GGX(dotNH, roughness);
-		// G = Geometric shadowing term (Microfacets shadowing)
-		float G = G_SchlicksmithGGX(dotNL, dotNV, roughness);
-		// F = Fresnel factor (Reflectance depending on angle of incidence)
-		glm::vec3 F = F_Schlick(dotNV, 1.f, F0);
-		glm::vec3 spec = D * F * G / (4.f * dotNL * dotNV + 0.001f);
-		glm::vec3 kD = (glm::vec3(1.0f) - F) * (1.0f - metallic);
-		out_color += (kD * diffuse / std::numbers::pi_v<float> + spec) * dotNL;
-	}
-
-	return out_color;
+	return false;
 }
 
 inline float calculate_pdf(const glm::vec3& L, const glm::vec3& V, const glm::vec3& N, float roughness)

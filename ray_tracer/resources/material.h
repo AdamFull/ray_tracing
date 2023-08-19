@@ -49,7 +49,7 @@ public:
 	virtual glm::vec3 emit(const FHitResult& hit_result) const { return glm::vec3(0.f); }
 
 	virtual void create(const FMaterialCreateInfo& createInfo) = 0;
-	virtual bool scatter(const FRay& in_ray, const FHitResult& hit_result, glm::vec3& color, FRay& out_ray, float& pdf) const { return false; }
+	virtual bool scatter(const FRay& in_ray, const FHitResult& hit_result, glm::vec3& color, FRay& out_ray, float& pdf, float& alpha) const { return false; }
 	virtual float scatter_pdf(const FRay& in_ray, const FHitResult& hit_result, const FRay& out_ray) const { return 0.f; };
 protected:
 	glm::vec4 sample_texture(ETextureType texture, const glm::vec2& uv) const;
@@ -70,7 +70,7 @@ public:
 	~CLambertianMaterial() override = default;
 
 	void create(const FMaterialCreateInfo& createInfo) override;
-	bool scatter(const FRay& in_ray, const FHitResult& hit_result, glm::vec3& color, FRay& out_ray, float& pdf) const override;
+	bool scatter(const FRay& in_ray, const FHitResult& hit_result, glm::vec3& color, FRay& out_ray, float& pdf, float& alpha) const override;
 	//float scatter_pdf(const FRay& in_ray, const FHitResult& hit_result, const FRay& out_ray) const override;
 private:
 	glm::vec3 m_albedo{};
@@ -85,7 +85,7 @@ public:
 	~CMetalRoughnessMaterial() override = default;
 
 	void create(const FMaterialCreateInfo& createInfo) override;
-	bool scatter(const FRay& in_ray, const FHitResult& hit_result, glm::vec3& color, FRay& out_ray, float& pdf) const override;
+	bool scatter(const FRay& in_ray, const FHitResult& hit_result, glm::vec3& color, FRay& out_ray, float& pdf, float& alpha) const override;
 	float scatter_pdf(const FRay& in_ray, const FHitResult& hit_result, const FRay& out_ray) const override;
 private:
 	
@@ -116,7 +116,7 @@ public:
 	~CDielectricMaterial() override = default;
 
 	void create(const FMaterialCreateInfo& createInfo) override;
-	bool scatter(const FRay& in_ray, const FHitResult& hit_result, glm::vec3& color, FRay& out_ray, float& pdf) const override;
+	bool scatter(const FRay& in_ray, const FHitResult& hit_result, glm::vec3& color, FRay& out_ray, float& pdf, float& alpha) const override;
 private:
 	static float reflectance(float cosine, float ref_idx);
 private:

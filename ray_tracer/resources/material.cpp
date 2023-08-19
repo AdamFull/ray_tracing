@@ -59,19 +59,30 @@ void CLambertianMaterial::create(const FMaterialCreateInfo& createInfo)
 	m_albedo = glm::vec3(createInfo.m_baseColorFactor);
 }
 
-bool CLambertianMaterial::scatter(const FRay& in_ray, const FHitResult& hit_result, glm::vec3& color, FRay& out_ray, float& pdf) const
+bool CLambertianMaterial::scatter(const FRay& in_ray, const FHitResult& hit_result, glm::vec3& color, FRay& out_ray, float& pdf, float& alpha) const
 {
 	// Sampling tangent space normal
 	auto ts_normal = sample_tangent_space_normal(hit_result.m_texcoord, hit_result.m_tangent, hit_result.m_bitangent, hit_result.m_normal);
 
-	out_ray.m_origin = hit_result.m_position;
-	out_ray.m_direction = ts_normal + sample_hemisphere(hit_result.m_tangent, hit_result.m_bitangent, hit_result.m_normal);
-
-	pdf = math::dot(ts_normal, out_ray.m_direction) / std::numbers::pi_v<float>;
-
 	auto albedo = m_albedo * hit_result.m_color;
 	if (m_textures.count(ETextureType::eAlbedo))
-		albedo *= glm::vec3(sample_texture(ETextureType::eAlbedo, hit_result.m_texcoord));
+	{
+		auto color = sample_texture(ETextureType::eAlbedo, hit_result.m_texcoord);
+		albedo *= glm::vec3(color);
+		alpha = color.a;
+	}
+
+	out_ray.m_origin = hit_result.m_position;
+	out_ray.m_origin = hit_result.m_position;
+	if (m_alphaMode == EAlphaMode::eMask && alpha < m_alphaCutoff)
+	{
+		out_ray.set_direction(in_ray.m_direction);
+		return true;
+	}
+	else
+		out_ray.m_direction = ts_normal + sample_hemisphere(hit_result.m_tangent, hit_result.m_bitangent, hit_result.m_normal);
+
+	pdf = math::dot(ts_normal, out_ray.m_direction) / std::numbers::pi_v<float>;
 
 	color = albedo;
 
@@ -90,9 +101,11 @@ void CMetalRoughnessMaterial::create(const FMaterialCreateInfo& createInfo)
 	m_albedo = glm::vec3(createInfo.m_baseColorFactor);
 	m_metallic = createInfo.m_fMetallicFactor;
 	m_roughness = createInfo.m_fRoughnessFactor;
+	m_alphaMode = createInfo.m_alphaMode;
+	m_alphaCutoff = createInfo.m_alphaCutoff;
 }
 
-bool CMetalRoughnessMaterial::scatter(const FRay& in_ray, const FHitResult& hit_result, glm::vec3& color, FRay& out_ray, float& pdf) const
+bool CMetalRoughnessMaterial::scatter(const FRay& in_ray, const FHitResult& hit_result, glm::vec3& color, FRay& out_ray, float& pdf, float& alpha) const
 {
 	// Sampling tangent space normal
 	auto ts_normal = sample_tangent_space_normal(hit_result.m_texcoord, hit_result.m_tangent, hit_result.m_bitangent, hit_result.m_normal);
@@ -109,13 +122,23 @@ bool CMetalRoughnessMaterial::scatter(const FRay& in_ray, const FHitResult& hit_
 		roughness = glm::clamp(roughness, 0.04f, 1.f);
 	}
 
-	out_ray.m_origin = hit_result.m_position;
-	out_ray.set_direction(importance_sample_ggx(glm::vec2(random<float>(), random<float>()), roughness, ts_normal));
-
 	// Sampling albedo texture
 	auto albedo = m_albedo * hit_result.m_color;
-	if(m_textures.count(ETextureType::eAlbedo))
-		albedo *= glm::vec3(sample_texture(ETextureType::eAlbedo, hit_result.m_texcoord));
+	if (m_textures.count(ETextureType::eAlbedo))
+	{
+		auto color = sample_texture(ETextureType::eAlbedo, hit_result.m_texcoord);
+		albedo *= glm::vec3(color);
+		alpha = color.a;
+	}
+
+	out_ray.m_origin = hit_result.m_position;
+	if (alpha < random<float>())
+	{
+		out_ray.set_direction(in_ray.m_direction);
+		return true;
+	}
+	else
+		out_ray.set_direction(importance_sample_ggx(glm::vec2(random<float>(), random<float>()), roughness, ts_normal));
 
 	glm::vec3 V = in_ray.m_direction * -1.f;
 
@@ -157,7 +180,7 @@ void CDielectricMaterial::create(const FMaterialCreateInfo& createInfo)
 
 }
 
-bool CDielectricMaterial::scatter(const FRay& in_ray, const FHitResult& hit_result, glm::vec3& color, FRay& out_ray, float& pdf) const
+bool CDielectricMaterial::scatter(const FRay& in_ray, const FHitResult& hit_result, glm::vec3& color, FRay& out_ray, float& pdf, float& alpha) const
 {
 	float refraction_ratio = hit_result.m_bFrontFace ? (1.f / m_fIor) : m_fIor;
 
