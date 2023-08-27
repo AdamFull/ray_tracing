@@ -28,6 +28,16 @@ void CBVHTreeNew::emplace(CTriangle triangle)
     m_vTriangles.emplace_back(triangle);
 }
 
+size_t CBVHTreeNew::size() const
+{
+    return m_vTriangles.size();
+}
+
+const CTriangle& CBVHTreeNew::get_triangle(size_t index) const
+{
+    return m_vTriangles.at(index);
+}
+
 bool CBVHTreeNew::hit(const FRay& ray, float t_min, float t_max, FHitResult& hit_result) const
 {
     return hit(ray, t_min, t_max, hit_result, 0u);

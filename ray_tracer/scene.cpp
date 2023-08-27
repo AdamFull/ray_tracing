@@ -110,21 +110,22 @@ void CScene::build_acceleration()
 
 bool CScene::trace_ray(const FRay& ray, float t_min, float t_max, FHitResult& hit_result)
 {
-	//float closest_hit{ t_max };
-	//bool was_hit{ false };
-	//
-	//for (auto& object : m_vHittableList)
-	//{
-	//	if (object->hit(ray, t_min, closest_hit, hit_result))
-	//	{
-	//		closest_hit = hit_result.m_distance;
-	//		was_hit = true;
-	//	}
-	//}
-	//
-	//return was_hit;
-
 	return m_pBVHTree->hit(ray, t_min, t_max, hit_result);
+}
+
+size_t CScene::get_light_index(float index) const
+{
+	return m_vLightIds.at(static_cast<size_t>(index * m_vLightIds.size() - 1ull));
+}
+
+const CTriangle& CScene::get_light(size_t index) const
+{
+	return m_pBVHTree->get_triangle(index);
+}
+
+float CScene::get_light_probability() const
+{
+	return 1.f / static_cast<float>(m_vLightIds.size());
 }
 
 entt::registry& CScene::get_registry()
@@ -223,7 +224,7 @@ void CScene::load_materials(const tinygltf::Model& model)
 {
 	if (model.materials.empty())
 	{
-		m_vMaterialIds.emplace_back(m_pResourceManager->add_material("default_diffuse_material", std::make_unique<CLambertianMaterial>(glm::vec3(0.5f))));
+		m_vMaterialIds.emplace_back(m_pResourceManager->add_material("default_diffuse_material", std::make_unique<CMaterial>(m_pResourceManager)));
 		return;
 	}
 
@@ -317,12 +318,10 @@ void CScene::load_materials(const tinygltf::Model& model)
 
 		// Create concrete material
 		std::unique_ptr<CMaterial> new_material{};
-		if (is_emissive)
-			new_material = std::make_unique<CEmissiveMaterial>(m_pResourceManager);
-		else if (is_metallicRoughness)
-			new_material = std::make_unique<CMetalRoughnessMaterial>(m_pResourceManager);
-		else
-			new_material = std::make_unique<CLambertianMaterial>(m_pResourceManager);
+		//if (is_emissive)
+		//	new_material = std::make_unique<CEmissiveMaterial>(m_pResourceManager);
+		//else
+			new_material = std::make_unique<CMaterial>(m_pResourceManager);
 
 		new_material->create(material_ci);
 
@@ -459,7 +458,7 @@ void CScene::load_mesh_component(const entt::entity& target, const tinygltf::Nod
 			{
 				FVertex vert{};
 				vert.m_position = glm::make_vec3(&bufferPos[v * 3]);
-				vert.m_normal = math::normalize(glm::vec3(bufferNormals ? glm::make_vec3(&bufferNormals[v * 3]) : glm::vec3(0.0f)));
+				vert.m_normal = glm::normalize(glm::vec3(bufferNormals ? glm::make_vec3(&bufferNormals[v * 3]) : glm::vec3(0.0f)));
 				vert.m_tangent = bufferTangents ? glm::vec4(glm::make_vec4(&bufferTangents[v * 4])) : glm::vec4(0.0f);
 
 				vert.m_texcoord = bufferTexCoords ? glm::make_vec2(&bufferTexCoords[v * 2]) : glm::vec2(0.0f);
@@ -584,11 +583,14 @@ void CScene::load_mesh_component(const entt::entity& target, const tinygltf::Nod
 			for (size_t index = 0ull; index < vertexBuffer.size(); ++index)
 			{
 				auto& vert = vertexBuffer[index];
-				glm::vec3 t = math::normalize(vert.m_tangent);
-				vert.m_tangent = glm::vec4(math::normalize(t - vert.m_normal * math::dot(vert.m_normal, t)), 0.f);
-				vert.m_tangent.w = math::dot(glm::cross(vert.m_normal, subtangents[index]), t) < 0.f ? -1.f : 1.f;
+				glm::vec3 t = glm::normalize(vert.m_tangent);
+				vert.m_tangent = glm::vec4(glm::normalize(t - vert.m_normal * glm::dot(vert.m_normal, t)), 0.f);
+				vert.m_tangent.w = glm::dot(glm::cross(vert.m_normal, subtangents[index]), t) < 0.f ? -1.f : 1.f;
 			}
 		}
+
+		auto& material = m_pResourceManager->get_material(material_id);
+		bool is_light_emitter = material->can_emit_light() && !material->can_scatter_light();
 
 		for (uint32_t index = 0u; index < indexBuffer.size(); index += 3u)
 		{
@@ -600,8 +602,11 @@ void CScene::load_mesh_component(const entt::entity& target, const tinygltf::Nod
 			auto& v1 = vertexBuffer.at(i1);
 			auto& v2 = vertexBuffer.at(i2);
 
-			//m_pBVHTree->emplace(new CTriangle(m_registry, target, material_id, v0, v1, v2));
-			m_pBVHTree->emplace(CTriangle(m_registry, target, material_id, v0, v1, v2));
+			auto triangle_index = m_pBVHTree->size();
+			m_pBVHTree->emplace(CTriangle(m_registry, target, material_id, v0, v1, v2, triangle_index));
+
+			if (is_light_emitter)
+				m_vLightIds.emplace_back(triangle_index);
 		}
 	}
 }

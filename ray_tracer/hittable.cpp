@@ -1,10 +1,39 @@
 #include "hittable.h"
 #include "ecs/components/transform_component.h"
 
-CTriangle::CTriangle(entt::registry& registry, entt::entity root, resource_id_t material_id, const FVertex& v0, const FVertex& v1, const FVertex& v2) :
+glm::vec2 sample_uniform_triangle(float s, float t)
+{
+	float a = glm::sqrt(s);
+	return glm::vec2(1.f - a, t * a);
+}
+
+void pretransform(const glm::mat4& tm, glm::vec3& v0, glm::vec3& v1, glm::vec3& v2, bool normalize = false)
+{
+	auto t0 = tm * glm::vec4(v0, 1.f);
+	auto t1 = tm * glm::vec4(v1, 1.f);
+	auto t2 = tm * glm::vec4(v2, 1.f);
+
+	v0 = normalize ? glm::normalize(glm::vec3(t0) / t0.w) : glm::vec3(t0) / t0.w;
+	v1 = normalize ? glm::normalize(glm::vec3(t1) / t1.w) : glm::vec3(t1) / t1.w;
+	v2 = normalize ? glm::normalize(glm::vec3(t2) / t2.w) : glm::vec3(t2) / t2.w;
+}
+
+void pretransform(const glm::mat4& tm, glm::vec4& v0, glm::vec4& v1, glm::vec4& v2, bool normalize = false)
+{
+	auto t0 = tm * glm::vec4(v0.x, v0.y, v0.z, 1.f);
+	auto t1 = tm * glm::vec4(v1.x, v1.y, v1.z, 1.f);
+	auto t2 = tm * glm::vec4(v2.x, v2.y, v2.z, 1.f);
+
+	v0 = glm::vec4(normalize ? glm::normalize(glm::vec3(t0) / t0.w) : glm::vec3(t0) / t0.w, v0.w);
+	v1 = glm::vec4(normalize ? glm::normalize(glm::vec3(t1) / t1.w) : glm::vec3(t1) / t1.w, v1.w);
+	v2 = glm::vec4(normalize ? glm::normalize(glm::vec3(t2) / t2.w) : glm::vec3(t2) / t2.w, v2.w);
+}
+
+CTriangle::CTriangle(entt::registry& registry, entt::entity root, resource_id_t material_id, const FVertex& v0, const FVertex& v1, const FVertex& v2, size_t index) :
 	m_v0(v0), m_v1(v1), m_v2(v2)
 {
 	m_material_id = material_id;
+	m_index = index;
 	m_pRegistry = &registry;
 	m_root = root;
 }
@@ -13,6 +42,7 @@ void CTriangle::create()
 {
 	auto& transform = m_pRegistry->get<FTransformComponent>(m_root);
 
+	// Pretransform positions
 	auto v0p = transform.m_model * glm::vec4(m_v0.m_position, 1.f);
 	auto v1p = transform.m_model * glm::vec4(m_v1.m_position, 1.f);
 	auto v2p = transform.m_model * glm::vec4(m_v2.m_position, 1.f);
@@ -21,10 +51,15 @@ void CTriangle::create()
 	m_v1.m_position = glm::vec3(v1p) / v1p.w;
 	m_v2.m_position = glm::vec3(v2p) / v2p.w;
 
+	m_e0 = m_v1.m_position - m_v0.m_position;
+	m_e1 = m_v2.m_position - m_v0.m_position;
+
+	m_area = 0.5f * glm::length(glm::cross(m_e0, m_e1));
+
 	m_aabb.m_min = math::min(m_v0.m_position, math::min(m_v1.m_position, m_v2.m_position));
 	m_aabb.m_max = math::max(m_v0.m_position, math::max(m_v1.m_position, m_v2.m_position));
 
-	m_normal = glm::mat3(transform.m_normal[0][0]);
+	m_normal = glm::mat3(transform.m_normal);
 
 	m_centroid = (m_v0.m_position + m_v1.m_position + m_v2.m_position) * 0.3333f;
 }
@@ -32,62 +67,64 @@ void CTriangle::create()
 bool CTriangle::hit(const FRay& ray, float t_min, float t_max, FHitResult& hit_result) const
 {
 	float dist{ hit_result.m_distance };
-#if defined(USE_INTRINSICS) && defined(USE_INTRINSICS_INTERSECTION) && 0
-	auto _r0 = _mm_setr_ps(ray.m_origin.x, ray.m_origin.y, ray.m_origin.z, 0.f);
-	auto _rd = _mm_setr_ps(ray.m_direction.x, ray.m_direction.y, ray.m_direction.z, 0.f);
-	auto _p0 = _mm_setr_ps(m_v0.m_position.x, m_v0.m_position.y, m_v0.m_position.z, 0.f);
-	auto _p1 = _mm_setr_ps(m_v1.m_position.x, m_v1.m_position.y, m_v1.m_position.z, 0.f);
-	auto _p2 = _mm_setr_ps(m_v2.m_position.x, m_v2.m_position.y, m_v2.m_position.z, 0.f);
-
-	__m128 _bcX, _bcY, _bcZ;
-	if (math::ray_triangle_intersect(_r0, _rd, _p0, _p1, _p2, dist, _bcX, _bcY, _bcZ))
+#if 0
+	__m128 w, u, v;
+	if (math::ray_triangle_intersect(ray.m_origin, ray.m_direction, m_e0, m_e1, m_v0.m_position, dist, w, u, v))
 	{
 		if (dist >= t_min && dist <= t_max)
 		{
 			hit_result.m_distance = dist;
 			hit_result.m_position = ray.at(dist);
 
-			// Interpolate color
-			__m128 _c0 = _mm_setr_ps(m_v0.m_color.x, m_v0.m_color.y, m_v0.m_color.z, 0.f);
-			__m128 _c1 = _mm_setr_ps(m_v1.m_color.x, m_v1.m_color.y, m_v1.m_color.z, 0.f);
-			__m128 _c2 = _mm_setr_ps(m_v2.m_color.x, m_v2.m_color.y, m_v2.m_color.z, 0.f);
-			__m128 _rc = _mm_add_ps(_mm_mul_ps(_bcX, _c0), _mm_add_ps(_mm_mul_ps(_bcY, _c1), _mm_mul_ps(_bcZ, _c2)));
+			float buf[4ull];
 
-			float _color[4ull];
-			_mm_storeu_ps(_color, _rc);
-			hit_result.m_color = glm::vec3(_color[0ull], _color[1ull], _color[2ull]);
+			_mm_store_ps(buf, _mm_add_ps(
+				_mm_mul_ps(w,
+					_mm_setr_ps(m_v0.m_color.x, m_v0.m_color.y, m_v0.m_color.z, 0.f)),
+				_mm_add_ps(
+					_mm_mul_ps(u,
+						_mm_setr_ps(m_v1.m_color.x, m_v1.m_color.y, m_v1.m_color.z, 0.f)),
+					_mm_mul_ps(v,
+						_mm_setr_ps(m_v2.m_color.x, m_v2.m_color.y, m_v2.m_color.z, 0.f)))));
 
-			// Load normal matrix
-			__m128 _nmr0 = _mm_setr_ps(m_normal[0].x, m_normal[0].y, m_normal[0].z, 0.f);
-			__m128 _nmr1 = _mm_setr_ps(m_normal[1].x, m_normal[1].y, m_normal[1].z, 0.f);
-			__m128 _nmr2 = _mm_setr_ps(m_normal[2].x, m_normal[2].y, m_normal[2].z, 0.f);
+			hit_result.m_color = glm::vec3(buf[0ull], buf[1ull], buf[2ull]);
 
-			// Interpolate normals
-			__m128 _n0 = _mm_setr_ps(m_v0.m_normal.x, m_v0.m_normal.y, m_v0.m_normal.z, 0.f);
-			__m128 _n1 = _mm_setr_ps(m_v1.m_normal.x, m_v1.m_normal.y, m_v1.m_normal.z, 0.f);
-			__m128 _n2 = _mm_setr_ps(m_v2.m_normal.x, m_v2.m_normal.y, m_v2.m_normal.z, 0.f);
-			__m128 _rn = _mm_add_ps(_mm_mul_ps(_bcX, _n0), _mm_add_ps(_mm_mul_ps(_bcY, _n1), _mm_mul_ps(_bcZ, _n2)));
-			_rn = math::_vec128_normalize(math::_mul_vec_to_mat(_rn, _nmr0, _nmr1, _nmr2));
+			_mm_store_ps(buf, _mm_add_ps(
+				_mm_mul_ps(w,
+					_mm_setr_ps(m_v0.m_normal.x, m_v0.m_normal.y, m_v0.m_normal.z, 0.f)),
+				_mm_add_ps(
+					_mm_mul_ps(u,
+						_mm_setr_ps(m_v1.m_normal.x, m_v1.m_normal.y, m_v1.m_normal.z, 0.f)),
+					_mm_mul_ps(v,
+						_mm_setr_ps(m_v2.m_normal.x, m_v2.m_normal.y, m_v2.m_normal.z, 0.f)))));
 
-			__m128 _t0 = _mm_setr_ps(m_v0.m_tangent.x, m_v0.m_tangent.y, m_v0.m_tangent.z, 0.f);
-			__m128 _t1 = _mm_setr_ps(m_v1.m_tangent.x, m_v1.m_tangent.y, m_v1.m_tangent.z, 0.f);
-			__m128 _t2 = _mm_setr_ps(m_v2.m_tangent.x, m_v2.m_tangent.y, m_v2.m_tangent.z, 0.f);
-			__m128 _tg = _mm_add_ps(_mm_mul_ps(_bcX, _t0), _mm_add_ps(_mm_mul_ps(_bcY, _t1), _mm_mul_ps(_bcZ, _t2)));
-			_tg = math::_vec128_normalize(math::_mul_vec_to_mat(_tg, _nmr0, _nmr1, _nmr2));
+			hit_result.set_face_normal(ray, glm::normalize(m_normal * glm::vec3(buf[0ull], buf[1ull], buf[2ull])));
 
-			__m128 _bt = math::_vec128_cross(_rn, _tg);
+			_mm_store_ps(buf, _mm_add_ps(
+				_mm_mul_ps(w,
+					_mm_setr_ps(m_v0.m_texcoord.x, m_v0.m_texcoord.y, 0.f, 0.f)),
+				_mm_add_ps(
+					_mm_mul_ps(u,
+						_mm_setr_ps(m_v1.m_texcoord.x, m_v1.m_texcoord.y, 0.f, 0.f)),
+					_mm_mul_ps(v,
+						_mm_setr_ps(m_v2.m_texcoord.x, m_v2.m_texcoord.y, 0.f, 0.f)))));
 
-			float _normal[4ull];
-			_mm_storeu_ps(_normal, _rn);
-			hit_result.set_face_normal(ray, glm::vec3(_normal[0ull], _normal[1ull], _normal[2ull]));
+			hit_result.m_texcoord = glm::vec2(buf[0ull], buf[1ull]);
 
-			float _tangentr[4ull];
-			_mm_storeu_ps(_tangentr, _tg);
-			hit_result.m_tangent = glm::vec3(_tangentr[0ull], _tangentr[1ull], _tangentr[2ull]);
+			_mm_store_ps(buf, _mm_add_ps(
+				_mm_mul_ps(w,
+					_mm_setr_ps(m_v0.m_tangent.x, m_v0.m_tangent.y, m_v0.m_tangent.z, m_v0.m_tangent.w)),
+				_mm_add_ps(
+					_mm_mul_ps(u,
+						_mm_setr_ps(m_v1.m_tangent.x, m_v1.m_tangent.y, m_v1.m_tangent.z, m_v1.m_tangent.w)),
+					_mm_mul_ps(v,
+						_mm_setr_ps(m_v2.m_tangent.x, m_v2.m_tangent.y, m_v2.m_tangent.z, m_v1.m_tangent.w)))));
 
-			float _bitangent[4ull];
-			_mm_storeu_ps(_bitangent, _bt);
-			hit_result.m_bitangent = glm::vec3(_bitangent[0ull], _bitangent[1ull], _bitangent[2ull]);
+			glm::vec4 tangent = { buf[0ull], buf[1ull], buf[2ull], buf[3ull] };
+
+			hit_result.m_tangent = glm::normalize(m_normal * glm::vec3(tangent));
+
+			hit_result.m_bitangent = glm::normalize(glm::cross(hit_result.m_normal, glm::vec3(tangent)) * tangent.w);
 
 			// Set material
 			hit_result.m_material_id = m_material_id;
@@ -97,8 +134,7 @@ bool CTriangle::hit(const FRay& ray, float t_min, float t_max, FHitResult& hit_r
 	}
 #else
 	glm::vec3 barycentric{};
-	//if (math::ray_triangle_intersect_test(ray.m_origin, ray.m_direction, n0, d0, n1, d1, n2, d2, dist, barycentric))
-	if(math::ray_triangle_intersect(ray.m_origin, ray.m_direction, m_v0.m_position, m_v1.m_position, m_v2.m_position, dist, barycentric))
+	if(math::ray_triangle_intersect(ray.m_origin, ray.m_direction, m_e0, m_e1, m_v0.m_position, dist, barycentric))
 	{
 		if (dist >= t_min && dist <= t_max)
 		{
@@ -110,20 +146,21 @@ bool CTriangle::hit(const FRay& ray, float t_min, float t_max, FHitResult& hit_r
 
 			// Calculating normal
 			auto outward_normal = barycentric.x * m_v0.m_normal + barycentric.y * m_v1.m_normal + barycentric.z * m_v2.m_normal;
-			outward_normal = math::normalize(m_normal * outward_normal);
+			outward_normal = glm::normalize(m_normal * outward_normal);
 			hit_result.set_face_normal(ray, outward_normal);
 
 			// Calculating texture coordinates
 			hit_result.m_texcoord = barycentric.x * m_v0.m_texcoord + barycentric.y * m_v1.m_texcoord + barycentric.z * m_v2.m_texcoord;
 
 			auto tangent = barycentric.x * m_v0.m_tangent + barycentric.y * m_v1.m_tangent + barycentric.z * m_v2.m_tangent;
-			tangent = glm::vec4(math::normalize(m_normal * glm::vec3(tangent)), tangent.w);
+			tangent = glm::vec4(glm::normalize(m_normal * glm::vec3(tangent)), tangent.w);
 			hit_result.m_tangent = glm::vec3(tangent);
 
-			hit_result.m_bitangent = math::normalize(glm::cross(hit_result.m_normal, glm::vec3(tangent)) * tangent.w);
+			hit_result.m_bitangent = glm::normalize(glm::cross(hit_result.m_normal, glm::vec3(tangent)) * tangent.w);
 
 			// Set material
 			hit_result.m_material_id = m_material_id;
+			hit_result.m_primitive_id = m_index;
 
 			return true;
 		}
@@ -131,6 +168,26 @@ bool CTriangle::hit(const FRay& ray, float t_min, float t_max, FHitResult& hit_r
 #endif
 
 	return false;
+}
+
+float CTriangle::pdf(const glm::vec3& p, const glm::vec3& wi) const
+{
+	FRay ray{};
+	ray.m_origin = p;
+	ray.set_direction(wi);
+
+	FHitResult hit_result{};
+	bool hit_something = hit(ray, 0.001f, std::numeric_limits<float>::infinity(), hit_result);
+
+	if (!hit_something)
+		return 0.f;
+
+	float cosThetaI = glm::dot(-wi, hit_result.m_normal);
+	if (math::less_equal_float(cosThetaI, 0.f))
+		return 0.f;
+
+	float square_dist = glm::length2(hit_result.m_position - p);
+	return square_dist / (cosThetaI * m_area);
 }
 
 const FAxixAlignedBoundingBox& CTriangle::bounds() const
@@ -141,4 +198,29 @@ const FAxixAlignedBoundingBox& CTriangle::bounds() const
 const glm::vec3 CTriangle::centroid() const
 {
 	return m_centroid;
+}
+
+resource_id_t CTriangle::get_material_id() const
+{
+	return m_material_id;
+}
+
+glm::vec3 CTriangle::sample(const glm::vec3& p, float s, float t, float& pdf) const
+{
+	glm::vec2 uv = sample_uniform_triangle(s, t);
+	float w = (1.f - uv.x - uv.y);
+	glm::vec3 q = uv.x * m_v0.m_position + uv.y * m_v1.m_position + w * m_v2.m_position;
+	glm::vec3 dir = glm::normalize(q - p);
+
+	glm::vec3 normal = uv.x * m_v0.m_normal + uv.y * m_v1.m_normal + w * m_v2.m_normal;
+	normal = glm::normalize(m_normal * normal);
+
+	float cosThetaI = glm::dot(-dir, normal);
+
+	if (math::less_equal_float(cosThetaI, 0.f))
+		pdf = 0.f;
+	else
+		pdf = glm::length2(q - p) / cosThetaI;
+
+	return dir;
 }

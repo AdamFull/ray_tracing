@@ -33,6 +33,10 @@ public:
 
 	bool trace_ray(const FRay& ray, float t_min, float t_max, FHitResult& hit_result);
 
+	size_t get_light_index(float index) const;
+	const CTriangle& get_light(size_t index) const;
+	float get_light_probability() const;
+
 	entt::registry& get_registry();
 	const entt::entity& get_root();
 
@@ -58,6 +62,7 @@ private:
 	std::vector<resource_id_t> m_vSamplerIds{};
 	std::vector<resource_id_t> m_vTextureIds{};
 	std::vector<resource_id_t> m_vMaterialIds{};
+	std::vector<size_t> m_vLightIds{};
 
 	std::filesystem::path m_parentPath{};
 

@@ -36,6 +36,8 @@ public:
 
 	void create();
 	void emplace(CTriangle triangle);
+	size_t size() const;
+	const CTriangle& get_triangle(size_t index) const;
 
 	bool hit(const FRay& ray, float t_min, float t_max, FHitResult& hit_result) const;
 private:

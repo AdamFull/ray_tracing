@@ -29,8 +29,8 @@ void CCameraSystem::update_camera(entt::registry& registry, const glm::uvec2& ex
 	bool needToRecalculateRays{ false };
 
 	camera->m_forward = glm::normalize(glm::rotate(transform->m_rotation, glm::vec3(0.f, 0.f, -1.f)));
-	camera->m_right = math::normalize(glm::cross(camera->m_forward, glm::vec3{ 0.f, 1.f, 0.f }));
-	camera->m_up = math::normalize(glm::cross(camera->m_right, camera->m_forward));
+	camera->m_right = glm::normalize(glm::cross(camera->m_forward, glm::vec3{ 0.f, 1.f, 0.f }));
+	camera->m_up = glm::normalize(glm::cross(camera->m_right, camera->m_forward));
 
 	if (extent.x != camera->m_viewportExtent.x || extent.y != camera->m_viewportExtent.y)
 	{
@@ -81,7 +81,7 @@ void CCameraSystem::recalculate_ray_directions(FCameraComponent* camera)
 			texcoord = texcoord * 2.f - 1.f;
 
 			glm::vec4 target = camera->m_invProjection * glm::vec4(texcoord.x, texcoord.y, 1.f, 1.f);
-			auto dir = glm::vec3(camera->m_invView * glm::vec4(math::normalize(glm::vec3(target) / target.w), 0.f));
+			auto dir = glm::vec3(camera->m_invView * glm::vec4(glm::normalize(glm::vec3(target) / target.w), 0.f));
 			camera->m_vRayDirections[x + y * viewport_extent.x] = glm::vec3(dir.x, dir.y, dir.z);
 		}
 	}

@@ -1,25 +1,153 @@
 #include "resource_manager.h"
 #include "util.h"
 
-#include "ggx.hpp"
+#include "bxdf.hpp"
 
-glm::vec3 sample_hemisphere(const glm::vec3& tangent, const glm::vec3& bitangent, const glm::vec3& normal)
+glm::vec3 srgb_to_linear(glm::vec3 srgbIn)
 {
-	float u = random<float>();
-	float v = random<float>();
-
-	float theta = 2 * std::numbers::pi_v<float> * u;
-	float phi = std::acos(2.f * v - 1.f);
-
-	glm::vec3 direction(glm::sin(phi) * glm::cos(theta), glm::sin(phi) * glm::sin(theta), glm::cos(phi));
-
-	direction = math::apply_otb(tangent, bitangent, normal, direction);
-	return direction;
+	glm::vec3 bLess = glm::step(glm::vec3(0.04045f), srgbIn);
+	return glm::mix(srgbIn / glm::vec3(12.92f), glm::pow((srgbIn + glm::vec3(0.055f)) / glm::vec3(1.055f), glm::vec3(2.4f)), bLess);
 }
 
-glm::vec3 calculate_tangent_space_normal(const glm::vec3 normal_color, const glm::vec3& tangent, const glm::vec3& bitangent, const glm::vec3& normal, float scale)
+void CMaterial::create(const FMaterialCreateInfo& createInfo)
 {
-	return math::normalize(math::apply_otb(tangent, bitangent, normal, ((2.f * normal_color - 1.f) * glm::vec3(scale, scale, 1.0))));
+	m_textures = createInfo.m_textures;
+	m_albedo = glm::vec3(createInfo.m_baseColorFactor);
+	m_metallic = createInfo.m_fMetallicFactor;
+	m_roughness = createInfo.m_fRoughnessFactor;
+	m_emissive = createInfo.m_emissiveFactor;
+	m_emissionStrength = createInfo.m_emissiveStrength;
+	m_alphaMode = createInfo.m_alphaMode;
+	m_alphaCutoff = createInfo.m_alphaCutoff;
+}
+
+glm::vec3 CMaterial::emit(const FHitResult& hit_result) const
+{
+	glm::vec3 emission{ m_emissive };
+	if (m_textures.count(ETextureType::eEmission))
+		emission *= srgb_to_linear(glm::vec3(sample_texture(ETextureType::eEmission, hit_result.m_texcoord)));
+
+	return emission * m_emissionStrength;
+}
+
+bool CMaterial::can_emit_light() const
+{
+	return m_emissive != glm::vec3(0.f) || m_textures.count(ETextureType::eEmission);
+}
+
+bool CMaterial::can_scatter_light() const
+{
+	return m_albedo != glm::vec3(0.f) || m_textures.count(ETextureType::eAlbedo);// || m_textures.count(ETextureType::eMetallRoughness);
+}
+
+glm::vec3 CMaterial::sample(const glm::vec3& wo, const glm::vec3& color, float metallic, float alpha, float transmission, float s, float t, float& pdf) const
+{
+	float eta = cos_theta(wo) > 0.f ? 1.f / m_ior : m_ior;
+
+	float diffuse_weight, specular_weight, transmittance_weight;
+	compute_lobe_probabilities(wo, color, metallic, transmission, eta, diffuse_weight, specular_weight, transmittance_weight);
+
+	glm::vec3 wi{};
+
+	if (s < diffuse_weight)
+	{
+		s = math::remap(s, 0.f, diffuse_weight - std::numeric_limits<float>::epsilon(), 0.f, 1.f - std::numeric_limits<float>::epsilon());
+		assert(s >= 0.0f && s < 1.0f);
+
+		wi = math::sign(cos_theta(wo)) * rnd::sample_cosine_hemisphere(s, t);
+	}
+	else if (s < diffuse_weight + specular_weight)
+	{
+		s = math::remap(s, diffuse_weight, diffuse_weight + specular_weight - std::numeric_limits<float>::epsilon(), 0.f, 1.f - std::numeric_limits<float>::epsilon());
+		assert(s >= 0.0f && s < 1.0f);
+
+		glm::vec3 wo_upper = math::sign(cos_theta(wo)) * wo;
+		glm::vec3 wh = math::sign(cos_theta(wo)) * rnd::sample_ggx_vndf(wo_upper, alpha, s, t);
+
+		if (glm::dot(wo, wh) < 0.f)
+			return glm::vec3(0.f);
+
+		wi = glm::reflect(wo, wh);
+
+		if (!on_same_hemisphere(wi, wo))
+			return glm::vec3(0.f);
+	}
+	else
+	{
+		s = math::remap(s, diffuse_weight + specular_weight, 1.f - std::numeric_limits<float>::epsilon(), 0.f, 1.f - std::numeric_limits<float>::epsilon());
+		assert(s >= 0.0f && s < 1.0f);
+
+		glm::vec3 wo_upper = math::sign(cos_theta(wo)) * wo;
+		glm::vec3 wh = math::sign(cos_theta(wo)) * rnd::sample_ggx_vndf(wo_upper, alpha, s, t);
+
+		if (glm::dot(wo, wh) < 0.f)
+			return glm::vec3(0.f);
+
+		if (!math::refract(wo, wh, eta, wi))
+			return glm::vec3(0.f);
+
+		if (on_same_hemisphere(wi, wo) || (glm::dot(wo, wh) * glm::dot(wi, wh) > 0.0f))
+			return glm::vec3(0.f);
+	}
+
+	pdf = diffuse_weight * cosine_weighted_pdf(wi, wo) + specular_weight * ggx_vndf_reflection_pdf(wi, wo, alpha) + transmittance_weight * ggx_vndf_refraction_pdf(wi, wo, eta, alpha);
+
+	return wi;
+}
+
+glm::vec3 CMaterial::eval(const glm::vec3& wi, const glm::vec3& wo, const glm::vec3& color, float metallic, float alpha, float transmittance) const
+{
+	float eta = cos_theta(wo) > 0.f ? 1.f / m_ior : m_ior;
+	glm::vec3 f0 = glm::mix(f_schlick_eta(eta), color, metallic);
+
+	glm::vec3 diffuse = lambert_diffuse(wi, wo, color);
+	glm::vec3 specular = microfacet_reflection_ggx(wi, wo, f0, eta, alpha);
+	glm::vec3 transmission = microfacet_transmission_ggx(wi, wo, f0, eta, alpha);
+
+	float diffuse_weight = (1.f - metallic) * (1.f - transmittance);
+	float transmission_weight = (1.f - metallic) * transmittance;
+
+	return diffuse_weight * diffuse + specular + transmission_weight * transmission;
+}
+
+float CMaterial::pdf(const glm::vec3& wi, const glm::vec3& wo, const glm::vec3& color, float metallic, float alpha, float transmission) const
+{
+	float eta = cos_theta(wo) > 0.f ? 1.f / m_ior : m_ior;
+	float diffuse_weight, specular_weight, transmittance_weight;
+	compute_lobe_probabilities(wo, color, metallic, transmission, eta, diffuse_weight, specular_weight, transmittance_weight);
+
+	return diffuse_weight * cosine_weighted_pdf(wi, wo) + specular_weight * ggx_vndf_reflection_pdf(wi, wo, alpha) + transmittance_weight * ggx_vndf_refraction_pdf(wi, wo, eta, alpha);
+}
+
+glm::vec3 CMaterial::sample_surface_normal(const FHitResult& hit_result) const
+{
+	return sample_tangent_space_normal(hit_result.m_texcoord, hit_result.m_tangent, hit_result.m_bitangent, hit_result.m_normal);
+}
+
+glm::vec3 CMaterial::sample_diffuse_color(const FHitResult& hit_result)
+{
+	auto diffuse = m_albedo * hit_result.m_color;
+	if (m_textures.count(ETextureType::eAlbedo))
+	{
+		auto color = sample_texture(ETextureType::eAlbedo, hit_result.m_texcoord);
+		diffuse *= srgb_to_linear(glm::vec3(color));
+	}
+	return diffuse;
+}
+
+glm::vec2 CMaterial::sample_surface_metallic_roughness(const FHitResult& hit_result) const
+{
+	glm::vec2 mr{ m_metallic, m_roughness };
+	if (m_textures.count(ETextureType::eMetallRoughness))
+	{
+		auto sampled_mr = srgb_to_linear(glm::vec3(sample_texture(ETextureType::eMetallRoughness, hit_result.m_texcoord)));
+
+		mr.y = glm::clamp(mr.y * sampled_mr.y, 0.04f, 1.f);
+		mr.y = glm::max(0.001f, mr.y * mr.y);
+		mr.x = mr.x * sampled_mr.z;
+	}
+
+	return mr;
 }
 
 glm::vec4 CMaterial::sample_texture(ETextureType texture, const glm::vec2& uv) const
@@ -38,168 +166,27 @@ glm::vec4 CMaterial::sample_texture(ETextureType texture, const glm::vec2& uv) c
 
 glm::vec3 CMaterial::sample_tangent_space_normal(const glm::vec2& uv, const glm::vec3& tangent, const glm::vec3& bitangent, const glm::vec3& normal) const
 {
-	if (m_textures.count(ETextureType::eNormal))
+	if (!m_textures.count(ETextureType::eNormal) || math::isnan(tangent) || math::isnan(bitangent))
 		return normal;
 	
-	auto sampled_normal = glm::vec3(sample_texture(ETextureType::eNormal, uv));
-
-	return calculate_tangent_space_normal(sampled_normal, tangent, bitangent, normal, 1.f);
+	auto sampled_normal = srgb_to_linear(glm::vec3(sample_texture(ETextureType::eNormal, uv)));
+	return glm::normalize(glm::mat3(tangent, bitangent, normal) * ((2.f * sampled_normal - 1.f) * glm::vec3(1.f, 1.f, 1.f)));
 }
 
-
-// Lambertian material
-CLambertianMaterial::CLambertianMaterial(CResourceManager* resource_manager)
+void CMaterial::compute_lobe_probabilities(const glm::vec3& wo, const glm::vec3& color, float metallic, float transmission, const float& eta, float& diffuse, float& specular, float& transmittance) const
 {
-	m_pResourceManager = resource_manager;
-}
+	glm::vec3 f0 = glm::mix(f_schlick_eta(eta), color, metallic);
+	glm::vec3 fresnel = f_schlick(glm::abs(cos_theta(wo)), f0);
 
-void CLambertianMaterial::create(const FMaterialCreateInfo& createInfo)
-{
-	m_textures = createInfo.m_textures;
-	m_albedo = glm::vec3(createInfo.m_baseColorFactor);
-}
+	float diffuse_weight = (1.f - metallic) * (1.f - transmission);
+	float transmission_weight = (1.f - metallic) * transmission;
 
-bool CLambertianMaterial::scatter(const FRay& in_ray, const FHitResult& hit_result, glm::vec3& color, FRay& out_ray, float& pdf, float& alpha) const
-{
-	// Sampling tangent space normal
-	auto ts_normal = sample_tangent_space_normal(hit_result.m_texcoord, hit_result.m_tangent, hit_result.m_bitangent, hit_result.m_normal);
+	diffuse = math::max_component(color) * diffuse_weight;
+	specular = math::max_component(fresnel);
+	transmittance = math::max_component(glm::vec3(1.f) - fresnel) * transmission_weight;
 
-	auto albedo = m_albedo * hit_result.m_color;
-	if (m_textures.count(ETextureType::eAlbedo))
-	{
-		auto color = sample_texture(ETextureType::eAlbedo, hit_result.m_texcoord);
-		albedo *= glm::vec3(color);
-		alpha = color.a;
-	}
-
-	out_ray.m_origin = hit_result.m_position;
-	out_ray.m_origin = hit_result.m_position;
-	if (m_alphaMode == EAlphaMode::eMask && alpha < m_alphaCutoff)
-	{
-		out_ray.set_direction(in_ray.m_direction);
-		return true;
-	}
-	else
-		out_ray.m_direction = ts_normal + sample_hemisphere(hit_result.m_tangent, hit_result.m_bitangent, hit_result.m_normal);
-
-	pdf = math::dot(ts_normal, out_ray.m_direction) / std::numbers::pi_v<float>;
-
-	color = albedo;
-
-	return true;
-}
-
-
-CMetalRoughnessMaterial::CMetalRoughnessMaterial(CResourceManager* resource_manager)
-{
-	m_pResourceManager = resource_manager;
-}
-
-void CMetalRoughnessMaterial::create(const FMaterialCreateInfo& createInfo)
-{
-	m_textures = createInfo.m_textures;
-	m_albedo = glm::vec3(createInfo.m_baseColorFactor);
-	m_metallic = createInfo.m_fMetallicFactor;
-	m_roughness = createInfo.m_fRoughnessFactor;
-	m_alphaMode = createInfo.m_alphaMode;
-	m_alphaCutoff = createInfo.m_alphaCutoff;
-}
-
-bool CMetalRoughnessMaterial::scatter(const FRay& in_ray, const FHitResult& hit_result, glm::vec3& color, FRay& out_ray, float& pdf, float& alpha) const
-{
-	// Sampling tangent space normal
-	auto ts_normal = sample_tangent_space_normal(hit_result.m_texcoord, hit_result.m_tangent, hit_result.m_bitangent, hit_result.m_normal);
-
-	// Sampling metallic roughness texture
-	float metallic = m_metallic;
-	float roughness = m_roughness;
-	if (m_textures.count(ETextureType::eMetallRoughness))
-	{
-		auto sampled_mr = sample_texture(ETextureType::eMetallRoughness, hit_result.m_texcoord);
-	
-		roughness = roughness * sampled_mr.y;
-		metallic = metallic * sampled_mr.z;
-		roughness = glm::clamp(roughness, 0.04f, 1.f);
-	}
-
-	// Sampling albedo texture
-	auto albedo = m_albedo * hit_result.m_color;
-	if (m_textures.count(ETextureType::eAlbedo))
-	{
-		auto color = sample_texture(ETextureType::eAlbedo, hit_result.m_texcoord);
-		albedo *= glm::vec3(color);
-		alpha = color.a;
-	}
-
-	out_ray.m_origin = hit_result.m_position;
-	if (alpha < random<float>())
-	{
-		out_ray.set_direction(in_ray.m_direction);
-		return true;
-	}
-	else
-		out_ray.set_direction(importance_sample_ggx(glm::vec2(random<float>(), random<float>()), roughness, ts_normal));
-
-	glm::vec3 V = in_ray.m_direction * -1.f;
-
-	return calculate_cook_torrance_color_brdf(color, out_ray.m_direction, V, ts_normal, albedo, roughness, metallic);
-}
-
-float CMetalRoughnessMaterial::scatter_pdf(const FRay& in_ray, const FHitResult& hit_result, const FRay& out_ray) const
-{
-	auto cosine = math::dot(hit_result.m_normal, out_ray.m_direction);
-	return cosine < 0.f ? 0.f : cosine / std::numbers::pi_v<float>;
-}
-
-
-// Emissive material
-CEmissiveMaterial::CEmissiveMaterial(CResourceManager* resource_manager)
-{
-	m_pResourceManager = resource_manager;
-}
-
-void CEmissiveMaterial::create(const FMaterialCreateInfo& createInfo)
-{
-	m_textures = createInfo.m_textures;
-	m_emissive = createInfo.m_emissiveFactor;
-	m_emissionStrength = createInfo.m_emissiveStrength;
-}
-
-glm::vec3 CEmissiveMaterial::emit(const FHitResult& hit_result) const
-{
-	glm::vec3 emission{ m_emissive };
-	if (m_textures.count(ETextureType::eEmission))
-		emission *= glm::vec3(sample_texture(ETextureType::eEmission, hit_result.m_texcoord));
-
-	return emission * m_emissionStrength;
-}
-
-// Dielectric material
-void CDielectricMaterial::create(const FMaterialCreateInfo& createInfo)
-{
-
-}
-
-bool CDielectricMaterial::scatter(const FRay& in_ray, const FHitResult& hit_result, glm::vec3& color, FRay& out_ray, float& pdf, float& alpha) const
-{
-	float refraction_ratio = hit_result.m_bFrontFace ? (1.f / m_fIor) : m_fIor;
-
-	auto direction = math::normalize(in_ray.m_direction);
-	float cos_theta = glm::min(math::dot(-direction, hit_result.m_normal), 1.f);
-	float sin_theta = math::fsqrt(1.f - cos_theta * cos_theta);
-
-	if ((refraction_ratio * sin_theta > 1.f) || reflectance(cos_theta, refraction_ratio) > random<float>())
-		out_ray.set_direction(glm::reflect(direction, hit_result.m_normal));
-	else
-		out_ray.set_direction(glm::refract(direction, hit_result.m_normal, refraction_ratio));
-
-	out_ray.m_origin = hit_result.m_position;
-	return true;
-}
-
-float CDielectricMaterial::reflectance(float cosine, float ref_idx)
-{
-	auto r0 = (1.f - ref_idx) / (1.f + ref_idx);
-	r0 = r0 * r0;
-	return r0 + (1.f - r0) * std::pow((1.f - cosine), 5.f);
+	float factor = 1.f / (diffuse + specular + transmittance);
+	diffuse *= factor;
+	specular *= factor;
+	transmittance *= factor;
 }

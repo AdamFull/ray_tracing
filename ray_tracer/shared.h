@@ -36,6 +36,7 @@ struct FHitResult
 	glm::vec2 m_texcoord{};
 	float m_distance{ std::numeric_limits<float>::infinity() };
 	bool m_bFrontFace{ false };
+	size_t m_primitive_id{ invalid_index };
 	resource_id_t m_material_id{ invalid_index };
 
 	bool is_hit() const 
@@ -45,7 +46,7 @@ struct FHitResult
 
 	inline void set_face_normal(const FRay& ray, const glm::vec3& outward_normal)
 	{
-		m_bFrontFace = math::dot(ray.m_direction, outward_normal) < 0.f;
-		m_normal = math::normalize(m_bFrontFace ? outward_normal : outward_normal * -1.f);
+		m_bFrontFace = glm::dot(ray.m_direction, outward_normal) < 0.f;
+		m_normal = glm::normalize(m_bFrontFace ? outward_normal : outward_normal * -1.f);
 	}
 };

@@ -2,8 +2,6 @@
 
 #include "ecs/systems/systems.h"
 
-#include "ggx.hpp"
-
 void CRayEngine::create(const std::filesystem::path& scenepath, uint32_t width, uint32_t heigth, uint32_t sample_count, uint32_t bounce_count)
 {
 	m_pResourceManager = std::make_unique<CResourceManager>();
