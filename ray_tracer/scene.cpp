@@ -10,7 +10,10 @@
 #include "resources/material.h"
 
 #define TINYGLTF_IMPLEMENTATION
-#include "lib/tiny_gltf.h"
+#include <tiny_gltf.h>
+
+#include <logger/logger.h>
+#include <utime.hpp>
 
 double getDoubleValueOrDefault(const std::string& name, const tinygltf::Value& val, double _default = 0.0)
 {
@@ -54,7 +57,7 @@ entt::entity create_node(entt::registry& registry, const std::string& name)
 	auto entity = registry.create();
 	registry.emplace<FTransformComponent>(entity, FTransformComponent{});
 	registry.emplace<FHierarchyComponent>(entity, FHierarchyComponent{ name });
-	std::cout << std::format("Entity with id {} was created\n", static_cast<uint32_t>(entity));
+	log_verbose("Entity with id {} was created", static_cast<uint32_t>(entity));
 	return entity;
 }
 
@@ -62,7 +65,7 @@ void attach_child(entt::registry& registry, entt::entity parent, entt::entity ch
 {
 	if (parent == child)
 	{
-		std::cout << std::format("Trying to add parent to parent. Parent entity {}, child entity {}.\n", static_cast<uint32_t>(parent), static_cast<uint32_t>(child));
+		log_warning("Trying to add parent to parent. Parent entity {}, child entity {}.", static_cast<uint32_t>(parent), static_cast<uint32_t>(child));
 		return;
 	}
 
@@ -71,11 +74,6 @@ void attach_child(entt::registry& registry, entt::entity parent, entt::entity ch
 
 	auto& chierarchy = registry.get<FHierarchyComponent>(child);
 	chierarchy.parent = parent;
-}
-
-bool loadImageDataFuncEmpty(tinygltf::Image* image, const int imageIndex, std::string* err, std::string* warn, int req_width, int req_height, const unsigned char* bytes, int size, void* userData)
-{
-	return true;
 }
 
 CScene::CScene(CResourceManager* resource_manager)
@@ -99,13 +97,16 @@ void CScene::create(const std::filesystem::path& scenepath)
 	//m_pBVHTree = new CBVHTree();
 	m_pBVHTree = new CBVHTreeNew();
 
-	// Load scene
+	utl::stopwatch sw;
 	load_gltf_scene(scenepath, 0u);
+	log_info("Scene loaded by {}s.", sw.stop<float>());
 }
 
 void CScene::build_acceleration()
 {
+	utl::stopwatch sw;
 	m_pBVHTree->create();
+	log_info("BVH tree built by {}s.", sw.stop<float>());
 }
 
 bool CScene::trace_ray(const FRay& ray, float t_min, float t_max, FHitResult& hit_result)
@@ -115,7 +116,7 @@ bool CScene::trace_ray(const FRay& ray, float t_min, float t_max, FHitResult& hi
 
 size_t CScene::get_light_index(float index) const
 {
-	return m_vLightIds.at(static_cast<size_t>(index * m_vLightIds.size() - 1ull));
+	return m_vLightIds.at(static_cast<size_t>(index * m_vLightIds.size()));
 }
 
 const CTriangle& CScene::get_light(size_t index) const
@@ -144,22 +145,36 @@ void CScene::load_gltf_scene(const std::filesystem::path& path, uint32_t scene_i
 	tinygltf::TinyGLTF gltfContext;
 
 	std::string error, warning;
-	gltfContext.SetImageLoader(&loadImageDataFuncEmpty, this);
+	gltfContext.SetImageLoader(&CScene::load_image_from_memory, this);
 
-	bool fileLoaded = gltfContext.LoadASCIIFromFile(&gltfModel, &error, &warning, path.string());
+	bool is_binary_format{ false };
+	bool is_file_loaded{ false };
+	auto ext = path.extension().string();
+	if (ext == ".gltf")
+		is_file_loaded = gltfContext.LoadASCIIFromFile(&gltfModel, &error, &warning, path.string());
+	else if (ext == ".glb")
+	{
+		is_file_loaded = gltfContext.LoadBinaryFromFile(&gltfModel, &error, &warning, path.string());
+		is_binary_format = true;
+	}
+
 
 	if (!warning.empty())
-		std::cout << std::format("\nWarnings while loading gltf scene \"{}\": \n{}", path.string(), warning);
+		log_warning("\nWarnings while loading gltf scene \"{}\": \n{}", path.string(), warning);
 	if (!error.empty())
-		std::cerr << std::format("\nErrors while loading gltf scene \"{}\": \n{}", path.string(), error);
+		log_error("\nErrors while loading gltf scene \"{}\": \n{}", path.string(), error);
 
-	if (!fileLoaded)
+	if (!is_file_loaded)
 	{
-		std::cerr << "Failed to load file\n";
+		log_error("Failed to load file.");
 		return;
 	}
 
 	load_samplers(gltfModel);
+
+	if(!is_binary_format)
+		load_images(gltfModel);
+
 	load_textures(gltfModel);
 	load_materials(gltfModel);
 
@@ -187,23 +202,16 @@ void CScene::load_samplers(const tinygltf::Model& model)
 	}
 }
 
-resource_id_t CScene::load_texture(const std::filesystem::path& filepath)
+void CScene::load_images(const tinygltf::Model& model)
 {
-	auto name = filepath.filename();
-	return m_pResourceManager->add_image(name.string(), filepath);
-}
-
-void CScene::load_textures(const tinygltf::Model& model)
-{
-	for (auto& texture : model.textures)
+	for (auto& image : model.images)
 	{
-		auto& image = model.images.at(texture.source);
 		auto texture_path = m_parentPath / url_decode(image.uri);
-
 		auto filename = texture_path.filename().string();
 
-		auto image_id = m_pResourceManager->get_image_id(filename);
+		log_verbose("Loading image {}.", filename);
 
+		auto image_id = m_pResourceManager->get_image_id(filename);
 		if (image_id != invalid_index)
 			m_pResourceManager->increment_image_usage(image_id);
 		else
@@ -213,11 +221,40 @@ void CScene::load_textures(const tinygltf::Model& model)
 			image_id = m_pResourceManager->add_image(filename, std::move(new_image));
 		}
 
+		m_vImageIds.emplace_back(image_id);
+	}
+
+	log_verbose("Loaded {} images.", m_vImageIds.size());
+}
+
+void CScene::load_image(tinygltf::Image* image, const int imageIndex, std::string* err, std::string* warn, int req_width, int req_height, const unsigned char* bytes, int size)
+{
+	auto image_name = image->name + image->mimeType + std::to_string(imageIndex);
+
+	auto image_id = m_pResourceManager->get_image_id(image_name);
+	if (image_id != invalid_index)
+		m_pResourceManager->increment_image_usage(image_id);
+	else
+	{
+		auto new_image = std::make_unique<CImage>();
+		new_image->load(bytes, size);
+		image_id = m_pResourceManager->add_image(image_name, std::move(new_image));
+	}
+
+	m_vImageIds.emplace_back(image_id);
+}
+
+void CScene::load_textures(const tinygltf::Model& model)
+{
+	for (auto& texture : model.textures)
+	{
+		auto& image_id = m_vImageIds.at(texture.source);
 		auto& image_ptr = m_pResourceManager->get_image(image_id);
 		image_ptr->set_sampler(m_vSamplerIds[texture.sampler]);
-		
 		m_vTextureIds.emplace_back(image_id);
 	}
+
+	log_verbose("Loaded {} textures.", m_vTextureIds.size());
 }
 
 void CScene::load_materials(const tinygltf::Model& model)
@@ -231,9 +268,6 @@ void CScene::load_materials(const tinygltf::Model& model)
 	uint32_t matIndex{ 0 };
 	for (auto& mat : model.materials)
 	{
-		bool is_metallicRoughness{ false };
-		bool is_emissive{ false };
-
 		FMaterialCreateInfo material_ci{};
 
 		if (mat.values.find("baseColorTexture") != mat.values.end())
@@ -246,7 +280,6 @@ void CScene::load_materials(const tinygltf::Model& model)
 		{
 			auto texture = mat.values.at("metallicRoughnessTexture");
 			material_ci.m_textures.emplace(ETextureType::eMetallRoughness, m_vTextureIds.at(texture.TextureIndex()));
-			is_metallicRoughness = true;
 		}
 
 		if (mat.additionalValues.find("normalTexture") != mat.additionalValues.end())
@@ -267,27 +300,21 @@ void CScene::load_materials(const tinygltf::Model& model)
 		{
 			auto texture = mat.additionalValues.at("emissiveTexture");
 			material_ci.m_textures.emplace(ETextureType::eEmission, m_vTextureIds.at(texture.TextureIndex()));
-			is_emissive = true;
 		}
 
 		if (mat.additionalValues.find("emissiveFactor") != mat.additionalValues.end())
 		{
 			material_ci.m_emissiveFactor = glm::make_vec3(mat.additionalValues.at("emissiveFactor").ColorFactor().data());
-			if(material_ci.m_emissiveFactor != glm::vec3(0.f))
-				is_emissive = true;
 		}
 
 		if (mat.values.find("roughnessFactor") != mat.values.end())
 		{
 			material_ci.m_fRoughnessFactor = static_cast<float>(mat.values.at("roughnessFactor").Factor());
-			is_metallicRoughness = true;
 		}
 
 		if (mat.values.find("metallicFactor") != mat.values.end())
 		{
 			material_ci.m_fMetallicFactor = static_cast<float>(mat.values.at("metallicFactor").Factor());
-			if(material_ci.m_fMetallicFactor > 0.f)
-				is_metallicRoughness = true;
 		}
 
 		if (mat.values.find("baseColorFactor") != mat.values.end())
@@ -310,10 +337,11 @@ void CScene::load_materials(const tinygltf::Model& model)
 		for (auto& [name, data] : mat.extensions)
 		{
 			if (name == "KHR_materials_emissive_strength")
-			{
 				material_ci.m_emissiveStrength = getDoubleValueOrDefault("emissiveStrength", data, 1.0);
-				is_emissive = true;
-			}
+			else if(name == "KHR_materials_ior")
+				material_ci.m_fIor = getDoubleValueOrDefault("ior", data, 1.5);
+			else if(name == "KHR_materials_transmission")
+				material_ci.m_fTransmission = getDoubleValueOrDefault("transmissionFactor", data);
 		}
 
 		// Create concrete material
@@ -327,6 +355,8 @@ void CScene::load_materials(const tinygltf::Model& model)
 
 		m_vMaterialIds.emplace_back(m_pResourceManager->add_material(mat.name, std::move(new_material)));
 	}
+
+	log_verbose("Loaded {} materials.", m_vMaterialIds.size());
 }
 
 void CScene::load_node(const entt::entity& parent, const tinygltf::Node& node, uint32_t nodeIndex, const tinygltf::Model& model, float globalscale)
@@ -590,7 +620,7 @@ void CScene::load_mesh_component(const entt::entity& target, const tinygltf::Nod
 		}
 
 		auto& material = m_pResourceManager->get_material(material_id);
-		bool is_light_emitter = material->can_emit_light() && !material->can_scatter_light();
+		bool is_light_emitter = material->can_emit_light();
 
 		for (uint32_t index = 0u; index < indexBuffer.size(); index += 3u)
 		{
@@ -608,6 +638,8 @@ void CScene::load_mesh_component(const entt::entity& target, const tinygltf::Nod
 			if (is_light_emitter)
 				m_vLightIds.emplace_back(triangle_index);
 		}
+
+		log_verbose("Loaded {} triangles.", indexBuffer.size() / 3);
 	}
 }
 
@@ -633,6 +665,7 @@ void CScene::load_camera_component(const entt::entity& target, const tinygltf::N
 	}
 
 	m_registry.emplace<FCameraComponent>(target, cameraComponent);
+	log_verbose("Loaded camera with id {}.", static_cast<uint32_t>(target));
 }
 
 void CScene::load_light_component(const entt::entity& target, uint32_t light_index, const tinygltf::Node& node, const tinygltf::Model& model)
@@ -670,4 +703,15 @@ void CScene::load_light_component(const entt::entity& target, uint32_t light_ind
 		lightComponent.m_radius = light.range;
 		m_registry.emplace<FPointLightComponent>(target, lightComponent);
 	}
+
+	log_verbose("Loaded {} light with id {}.", light.type, static_cast<uint32_t>(target));
+}
+
+bool CScene::load_image_from_memory(tinygltf::Image* image, const int imageIndex, std::string* err, std::string* warn, int req_width, int req_height, const unsigned char* bytes, int size, void* userData)
+{
+	auto self = (CScene*)userData;
+
+	self->load_image(image, imageIndex, err, warn, req_width, req_height, bytes, size);
+
+	return true;
 }

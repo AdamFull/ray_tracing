@@ -134,8 +134,8 @@ void CBVHTreeNew::grow(uint32_t node_idx, FAxixAlignedBoundingBox& aabb)
         node.m_aabb.grow(triangle_bounds);
 
         auto& centroid = triangle.centroid();
-        aabb.m_min = math::min(aabb.m_min, centroid);
-        aabb.m_max = math::max(aabb.m_max, centroid);
+        aabb.m_min = glm::min(aabb.m_min, centroid);
+        aabb.m_max = glm::max(aabb.m_max, centroid);
     }
 }
 

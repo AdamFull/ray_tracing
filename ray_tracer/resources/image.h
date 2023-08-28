@@ -19,6 +19,7 @@ public:
 
 	void create(const uint32_t width, const uint32_t height);
 	void load(const std::filesystem::path& filepath);
+	void load(const uint8_t* data, int32_t size);
 	void save(const std::filesystem::path& filepath);
 
 	void set_pixel(uint32_t x, uint32_t y, uint32_t color);

@@ -1,0 +1,22 @@
+{
+  "framebuffer": {
+    "width": 1280,
+    "height": 720,
+    "antialiasing": false
+  },
+  "output": {
+    "image_name": "final.png"
+  },
+  "integrator": {
+    "sample_count": 50,
+    "bounce_count": 15,
+    "rr_threshold": 3
+  },
+  "tonemapping": {
+    "gamma": 2.2,
+    "exposure": 4.0
+  },
+  "scene": {
+    "path": "meshes/DamagedHelmet/glTF/DamagedHelmet.gltf"
+  }
+}

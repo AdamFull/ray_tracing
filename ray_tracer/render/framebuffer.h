@@ -27,4 +27,6 @@ private:
 
 private:
 	CResourceManager* m_pResourceManager{ nullptr };
+	float m_gamma{ 2.2f };
+	float m_exposure{ 4.f };
 };

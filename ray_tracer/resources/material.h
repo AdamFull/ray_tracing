@@ -29,13 +29,16 @@ struct FMaterialCreateInfo
 	float m_fNormalMapScale{ 1.f };
 	float m_fOcclusionStrength{ 1.f };
 
-	glm::vec4 m_baseColorFactor{ 0.f };
+	glm::vec4 m_baseColorFactor{ 1.f };
 
 	glm::vec3 m_emissiveFactor{ 0.f };
 	float m_emissiveStrength{ 1.f };
 
 	float m_fRoughnessFactor{ 1.f };
-	float m_fMetallicFactor{ 1.f };
+	float m_fMetallicFactor{ 0.f };
+
+	float m_fIor{ 1.5f };
+	float m_fTransmission{ 0.f };
 };
 
 class COrthonormalBasis
@@ -85,9 +88,9 @@ public:
 	bool can_emit_light() const;
 	bool can_scatter_light() const;
 
-	glm::vec3 sample(const glm::vec3& wo, const glm::vec3& color, float metallic, float alpha, float transmission, float s, float t, float& pdf) const;
-	glm::vec3 eval(const glm::vec3& wi, const glm::vec3& wo, const glm::vec3& color, float metallic, float alpha, float transmittance) const;
-	float pdf(const glm::vec3& wi, const glm::vec3& wo, const glm::vec3& color, float metallic, float alpha, float transmission) const;
+	glm::vec3 sample(const glm::vec3& wo, const glm::vec3& color, float metallic, float alpha, float s, float t, float& pdf) const;
+	glm::vec3 eval(const glm::vec3& wi, const glm::vec3& wo, const glm::vec3& color, float metallic, float alpha) const;
+	float pdf(const glm::vec3& wi, const glm::vec3& wo, const glm::vec3& color, float metallic, float alpha) const;
 
 	glm::vec3 sample_diffuse_color(const FHitResult& hit_result);
 	glm::vec3 sample_surface_normal(const FHitResult& hit_result) const;
@@ -97,19 +100,19 @@ protected:
 	glm::vec4 sample_texture(ETextureType texture, const glm::vec2& uv) const;
 	glm::vec3 sample_tangent_space_normal(const glm::vec2& uv, const glm::vec3& tangent, const glm::vec3& bitangent, const glm::vec3& normal) const;
 
-	void compute_lobe_probabilities(const glm::vec3& wo, const glm::vec3& color, float metallic, float transmission, const float& eta, float& diffuse, float& specular, float& transmittance) const;
+	void compute_lobe_probabilities(const glm::vec3& wo, const glm::vec3& color, float metallic, const float& eta, float& diffuse, float& specular, float& transmittance) const;
 protected:
 	std::unordered_map<ETextureType, resource_id_t> m_textures{};
 
-	glm::vec3 m_albedo{};
+	glm::vec3 m_albedo{1.f};
 
-	float m_metallic{ 1.f };
+	float m_metallic{ 0.f };
 	float m_roughness{ 1.f };
 
 	glm::vec3 m_emissive{};
 	float m_emissionStrength{ 1.f };
 
-	float m_ior{ 1.f };
+	float m_ior{ 1.5f };
 	float m_transmission{ 0.f };
 
 	EAlphaMode m_alphaMode{};

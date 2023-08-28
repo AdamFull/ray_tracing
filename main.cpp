@@ -4,23 +4,44 @@
 #include "ray_tracer/math/math.hpp"
 #include "util.h"
 
-// Add setting save every N samples
-constexpr const uint32_t screen_width = 1280u;
-constexpr const uint32_t screen_height = 720u;
-constexpr const uint32_t sample_count = 256u;
-constexpr const uint32_t bounce_count = 10u;
+#include "argparser.h"
+#include "configuration.h"
 
-static void BM_ray_trace(benchmark::State& state)
+#include <logger/logger.h>
+#include <utime.hpp>
+
+int main(int argc, char** argv)
 {
+	log_add_file_output("log.log");
+	log_add_cout_output();
+	log_init("Path Tracer", "1.0.0");
+
+	utl::stopwatch sw{};
+	utl::stopwatch timer{};
+
+	CArgumentParser argparse(argc, argv);
+	CConfiguration::getInstance()->load("config.json");
+
+	auto& config = CConfiguration::getInstance()->get();
+
+	config.m_scfg.m_scene_path = argparse.try_get("--in", config.m_scfg.m_scene_path);
+	config.m_ocfg.m_image_name = argparse.try_get("--out", config.m_ocfg.m_image_name);
+	config.m_fbcfg.m_width = argparse.try_get("--width", config.m_fbcfg.m_width);
+	config.m_fbcfg.m_height = argparse.try_get("--height", config.m_fbcfg.m_height);
+	config.m_icfg.m_sample_count = argparse.try_get("--samples", config.m_icfg.m_sample_count);
+	config.m_icfg.m_bounce_count = argparse.try_get("--bounces", config.m_icfg.m_bounce_count);
+	config.m_icfg.m_rr_threshold = argparse.try_get("--rr", config.m_icfg.m_rr_threshold);
+
+	log_info("Configuration loaded by {}s", timer.stop<float>());
+
 	auto engine = std::make_unique<CRayEngine>();
-	//engine->create("../../meshes/Triangle/glTF/Triangle.gltf", screen_width, screen_height, bounce_count);
-	engine->create("../../meshes/DamagedHelmet/glTF/DamagedHelmet.gltf", screen_width, screen_height, sample_count, bounce_count);
-	//engine->create("../../meshes/CornelBox/Cycles.gltf", screen_width, screen_height, sample_count, bounce_count);
-	//engine->create("../../meshes/Duck/Duck.gltf", screen_width, screen_height, sample_count, bounce_count);
-	//engine->create("../../meshes/cyberpunk/scene.gltf", screen_width, screen_height, sample_count, bounce_count);
-	
-	for (auto _ : state)
-		engine->update();
+	engine->create();
+
+	log_info("Path tracer initialized by {}s", timer.stop<float>());
+
+	engine->update();
+
+	log_info("Image traced by {}s", timer.stop<float>());
 
 	auto& resource_manager = engine->get_resource_manager();
 	auto& renderer = engine->get_renderer();
@@ -30,8 +51,10 @@ static void BM_ray_trace(benchmark::State& state)
 
 	auto& image = resource_manager->get_image(image_id);
 
-	image->save("final.png");
-}
-BENCHMARK(BM_ray_trace)->Iterations(1);
+	image->save(config.m_ocfg.m_image_name);
 
-BENCHMARK_MAIN();
+	log_info("Result saved by {}s.", timer.stop<float>());
+	log_info("Running time {}s.", sw.stop<float>());
+
+	return 0;
+}

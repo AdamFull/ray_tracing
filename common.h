@@ -10,8 +10,6 @@
 //#define USE_INTRINSICS_OPERATIONS
 //#define USE_INTRINSICS_INTERSECTION
 
-#include "random.h"
-
 #include "math.hpp"
 
 //#include "ray_tracer/math/math.hpp"

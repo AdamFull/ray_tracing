@@ -56,8 +56,8 @@ void CTriangle::create()
 
 	m_area = 0.5f * glm::length(glm::cross(m_e0, m_e1));
 
-	m_aabb.m_min = math::min(m_v0.m_position, math::min(m_v1.m_position, m_v2.m_position));
-	m_aabb.m_max = math::max(m_v0.m_position, math::max(m_v1.m_position, m_v2.m_position));
+	m_aabb.m_min = glm::min(m_v0.m_position, glm::min(m_v1.m_position, m_v2.m_position));
+	m_aabb.m_max = glm::max(m_v0.m_position, glm::max(m_v1.m_position, m_v2.m_position));
 
 	m_normal = glm::mat3(transform.m_normal);
 

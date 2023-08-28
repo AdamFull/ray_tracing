@@ -1,9 +1,9 @@
 #include "image.h"
 
 #define STB_IMAGE_IMPLEMENTATION
-#include "lib/stb_image.h"
+#include "stb_image.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "lib/stb_image_write.h"
+#include "stb_image_write.h"
 
 CImage::CImage(uint32_t width, uint32_t heigth)
 {
@@ -27,6 +27,18 @@ void CImage::load(const std::filesystem::path& filepath)
 {
 	int32_t width{ 0 }, height{ 0 }, components{ 0 };
 	uint8_t* image = stbi_load(filepath.string().c_str(), &width, &height, &components, 4);
+
+	create(width, height);
+
+	std::memmove(m_pData.get(), image, m_uWidth * m_uHeight * 4u);
+
+	stbi_image_free(image);
+}
+
+void CImage::load(const uint8_t* data, int32_t size)
+{
+	int32_t width{ 0 }, height{ 0 }, components{ 0 };
+	uint8_t* image = stbi_load_from_memory(data, size, &width, &height, &components, 4);
 
 	create(width, height);
 

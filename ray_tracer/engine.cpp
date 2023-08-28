@@ -2,16 +2,20 @@
 
 #include "ecs/systems/systems.h"
 
-void CRayEngine::create(const std::filesystem::path& scenepath, uint32_t width, uint32_t heigth, uint32_t sample_count, uint32_t bounce_count)
+#include <configuration.h>
+
+void CRayEngine::create()
 {
+	auto& config = CConfiguration::getInstance()->get();
+
 	m_pResourceManager = std::make_unique<CResourceManager>();
 
-	m_pRenderer = std::make_unique<CRenderCore>(m_pResourceManager.get());
-	m_pRenderer->create(width, heigth, sample_count, bounce_count);
+	m_pRenderer = std::make_unique<CIntegrator>(m_pResourceManager.get());
+	m_pRenderer->create(config.m_fbcfg.m_width, config.m_fbcfg.m_height, config.m_icfg.m_sample_count, config.m_icfg.m_bounce_count, config.m_icfg.m_rr_threshold);
 
 	m_pScene = std::make_unique<CScene>(m_pResourceManager.get());
 	
-	m_pScene->create(scenepath);
+	m_pScene->create(config.m_scfg.m_scene_path);
 
 	// Create systems
 	m_vSystems.emplace_back(std::make_unique<CHierarchySystem>());
@@ -33,7 +37,7 @@ const std::unique_ptr<CResourceManager>& CRayEngine::get_resource_manager() cons
 	return m_pResourceManager;
 }
 
-const std::unique_ptr<CRenderCore>& CRayEngine::get_renderer() const
+const std::unique_ptr<CIntegrator>& CRayEngine::get_renderer() const
 {
 	return m_pRenderer;
 }

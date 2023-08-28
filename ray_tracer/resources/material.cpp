@@ -3,6 +3,8 @@
 
 #include "bxdf.hpp"
 
+#include "render/rsampler.h"
+
 glm::vec3 srgb_to_linear(glm::vec3 srgbIn)
 {
 	glm::vec3 bLess = glm::step(glm::vec3(0.04045f), srgbIn);
@@ -19,6 +21,9 @@ void CMaterial::create(const FMaterialCreateInfo& createInfo)
 	m_emissionStrength = createInfo.m_emissiveStrength;
 	m_alphaMode = createInfo.m_alphaMode;
 	m_alphaCutoff = createInfo.m_alphaCutoff;
+
+	m_ior = createInfo.m_fIor;
+	m_transmission = createInfo.m_fTransmission;
 }
 
 glm::vec3 CMaterial::emit(const FHitResult& hit_result) const
@@ -37,86 +42,87 @@ bool CMaterial::can_emit_light() const
 
 bool CMaterial::can_scatter_light() const
 {
-	return m_albedo != glm::vec3(0.f) || m_textures.count(ETextureType::eAlbedo);// || m_textures.count(ETextureType::eMetallRoughness);
+	return m_albedo != glm::vec3(0.f) || m_textures.count(ETextureType::eAlbedo) || m_textures.count(ETextureType::eMetallRoughness);
 }
 
-glm::vec3 CMaterial::sample(const glm::vec3& wo, const glm::vec3& color, float metallic, float alpha, float transmission, float s, float t, float& pdf) const
+glm::vec3 CMaterial::sample(const glm::vec3& wo, const glm::vec3& color, float metallic, float alpha, float u, float v, float& pdf) const
 {
 	float eta = cos_theta(wo) > 0.f ? 1.f / m_ior : m_ior;
 
 	float diffuse_weight, specular_weight, transmittance_weight;
-	compute_lobe_probabilities(wo, color, metallic, transmission, eta, diffuse_weight, specular_weight, transmittance_weight);
+	compute_lobe_probabilities(wo, color, metallic, eta, diffuse_weight, specular_weight, transmittance_weight);
 
 	glm::vec3 wi{};
 
-	if (s < diffuse_weight)
+	if (u < diffuse_weight)
 	{
-		s = math::remap(s, 0.f, diffuse_weight - std::numeric_limits<float>::epsilon(), 0.f, 1.f - std::numeric_limits<float>::epsilon());
-		assert(s >= 0.0f && s < 1.0f);
+		u = math::remap(u, 0.0f, diffuse_weight - std::numeric_limits<float>::epsilon(), 0.0f, 1.f - std::numeric_limits<float>::epsilon());
+		assert(u >= 0.0f && u < 1.0f);
 
-		wi = math::sign(cos_theta(wo)) * rnd::sample_cosine_hemisphere(s, t);
+		wi = math::sign(cos_theta(wo)) * CCMGSampler::sample_cosine_hemisphere(u, v);
+		assert(math::is_normalized(wi));
 	}
-	else if (s < diffuse_weight + specular_weight)
+	else if (u < diffuse_weight + specular_weight)
 	{
-		s = math::remap(s, diffuse_weight, diffuse_weight + specular_weight - std::numeric_limits<float>::epsilon(), 0.f, 1.f - std::numeric_limits<float>::epsilon());
-		assert(s >= 0.0f && s < 1.0f);
+		u = math::remap(u, diffuse_weight, diffuse_weight + specular_weight - std::numeric_limits<float>::epsilon(), 0.0f, 1.f - std::numeric_limits<float>::epsilon());
+		assert(u >= 0.0f && u < 1.0f);
 
 		glm::vec3 wo_upper = math::sign(cos_theta(wo)) * wo;
-		glm::vec3 wh = math::sign(cos_theta(wo)) * rnd::sample_ggx_vndf(wo_upper, alpha, s, t);
-
-		if (glm::dot(wo, wh) < 0.f)
-			return glm::vec3(0.f);
+		glm::vec3 wh = math::sign(cos_theta(wo)) * CCMGSampler::sample_ggx_vndf(wo_upper, alpha, u, v);
+		if (glm::dot(wo, wh) < 0.0f)
+			return glm::vec3(0.0f);
 
 		wi = glm::reflect(wo, wh);
-
 		if (!on_same_hemisphere(wi, wo))
-			return glm::vec3(0.f);
+			return glm::vec3(0.0f);
 	}
 	else
 	{
-		s = math::remap(s, diffuse_weight + specular_weight, 1.f - std::numeric_limits<float>::epsilon(), 0.f, 1.f - std::numeric_limits<float>::epsilon());
-		assert(s >= 0.0f && s < 1.0f);
+		u = math::remap(u, diffuse_weight + specular_weight, 1.f - std::numeric_limits<float>::epsilon(), 0.0f, 1.f - std::numeric_limits<float>::epsilon());
+		assert(u >= 0.0f && u < 1.0f);
 
 		glm::vec3 wo_upper = math::sign(cos_theta(wo)) * wo;
-		glm::vec3 wh = math::sign(cos_theta(wo)) * rnd::sample_ggx_vndf(wo_upper, alpha, s, t);
-
-		if (glm::dot(wo, wh) < 0.f)
-			return glm::vec3(0.f);
+		glm::vec3 wh = math::sign(cos_theta(wo)) * CCMGSampler::sample_ggx_vndf(wo_upper, alpha, u, v);
+		if (glm::dot(wo, wh) < 0.0f)
+			return glm::vec3(0.0f);
 
 		if (!math::refract(wo, wh, eta, wi))
-			return glm::vec3(0.f);
+			return glm::vec3(0.0f);
 
-		if (on_same_hemisphere(wi, wo) || (glm::dot(wo, wh) * glm::dot(wi, wh) > 0.0f))
-			return glm::vec3(0.f);
+		if (on_same_hemisphere(wi, wo))
+			return glm::vec3(0.0f);
+
+		if (glm::dot(wo, wh) * glm::dot(wi, wh) > 0.0f)
+			return glm::vec3(0.0f);
 	}
 
-	pdf = diffuse_weight * cosine_weighted_pdf(wi, wo) + specular_weight * ggx_vndf_reflection_pdf(wi, wo, alpha) + transmittance_weight * ggx_vndf_refraction_pdf(wi, wo, eta, alpha);
+	pdf = diffuse_weight * cosine_weighted_pdf(wi, wo) + specular_weight * ggx_vndf_reflection_pdf(wi, wo, alpha) + transmittance_weight * ggx_vndf_transmission_pdf(wi, wo, eta, alpha);
 
 	return wi;
 }
 
-glm::vec3 CMaterial::eval(const glm::vec3& wi, const glm::vec3& wo, const glm::vec3& color, float metallic, float alpha, float transmittance) const
+glm::vec3 CMaterial::eval(const glm::vec3& wi, const glm::vec3& wo, const glm::vec3& color, float metallic, float alpha) const
 {
 	float eta = cos_theta(wo) > 0.f ? 1.f / m_ior : m_ior;
 	glm::vec3 f0 = glm::mix(f_schlick_eta(eta), color, metallic);
 
 	glm::vec3 diffuse = lambert_diffuse(wi, wo, color);
 	glm::vec3 specular = microfacet_reflection_ggx(wi, wo, f0, eta, alpha);
-	glm::vec3 transmission = microfacet_transmission_ggx(wi, wo, f0, eta, alpha);
+	glm::vec3 transmission = color * microfacet_transmission_ggx(wi, wo, f0, eta, alpha);
 
-	float diffuse_weight = (1.f - metallic) * (1.f - transmittance);
-	float transmission_weight = (1.f - metallic) * transmittance;
+	float diffuse_weight = (1.f - metallic) * (1.f - m_transmission);
+	float transmission_weight = (1.f - metallic) * m_transmission;
 
 	return diffuse_weight * diffuse + specular + transmission_weight * transmission;
 }
 
-float CMaterial::pdf(const glm::vec3& wi, const glm::vec3& wo, const glm::vec3& color, float metallic, float alpha, float transmission) const
+float CMaterial::pdf(const glm::vec3& wi, const glm::vec3& wo, const glm::vec3& color, float metallic, float alpha) const
 {
 	float eta = cos_theta(wo) > 0.f ? 1.f / m_ior : m_ior;
 	float diffuse_weight, specular_weight, transmittance_weight;
-	compute_lobe_probabilities(wo, color, metallic, transmission, eta, diffuse_weight, specular_weight, transmittance_weight);
+	compute_lobe_probabilities(wo, color, metallic, eta, diffuse_weight, specular_weight, transmittance_weight);
 
-	return diffuse_weight * cosine_weighted_pdf(wi, wo) + specular_weight * ggx_vndf_reflection_pdf(wi, wo, alpha) + transmittance_weight * ggx_vndf_refraction_pdf(wi, wo, eta, alpha);
+	return diffuse_weight * cosine_weighted_pdf(wi, wo) + specular_weight * ggx_vndf_reflection_pdf(wi, wo, alpha) + transmittance_weight * ggx_vndf_transmission_pdf(wi, wo, eta, alpha);
 }
 
 glm::vec3 CMaterial::sample_surface_normal(const FHitResult& hit_result) const
@@ -140,11 +146,11 @@ glm::vec2 CMaterial::sample_surface_metallic_roughness(const FHitResult& hit_res
 	glm::vec2 mr{ m_metallic, m_roughness };
 	if (m_textures.count(ETextureType::eMetallRoughness))
 	{
-		auto sampled_mr = srgb_to_linear(glm::vec3(sample_texture(ETextureType::eMetallRoughness, hit_result.m_texcoord)));
+		auto sampled_mr = glm::vec3(sample_texture(ETextureType::eMetallRoughness, hit_result.m_texcoord));
 
-		mr.y = glm::clamp(mr.y * sampled_mr.y, 0.04f, 1.f);
+		mr.y = mr.y * sampled_mr.y;
 		mr.y = glm::max(0.001f, mr.y * mr.y);
-		mr.x = mr.x * sampled_mr.z;
+		mr.x = mr.x > 0.f ? mr.x * sampled_mr.z : sampled_mr.z;
 	}
 
 	return mr;
@@ -166,20 +172,27 @@ glm::vec4 CMaterial::sample_texture(ETextureType texture, const glm::vec2& uv) c
 
 glm::vec3 CMaterial::sample_tangent_space_normal(const glm::vec2& uv, const glm::vec3& tangent, const glm::vec3& bitangent, const glm::vec3& normal) const
 {
-	if (!m_textures.count(ETextureType::eNormal) || math::isnan(tangent) || math::isnan(bitangent))
+	if (!m_textures.count(ETextureType::eNormal))
 		return normal;
+
+	auto sampled_normal = glm::vec3(sample_texture(ETextureType::eNormal, uv));
+
+	if (math::isnan(tangent) || math::isnan(bitangent))
+	{
+		COrthonormalBasis otb(normal);
+		return glm::normalize(otb.to_local(((2.f * sampled_normal - 1.f) * glm::vec3(1.f, 1.f, 1.f))));
+	}
 	
-	auto sampled_normal = srgb_to_linear(glm::vec3(sample_texture(ETextureType::eNormal, uv)));
 	return glm::normalize(glm::mat3(tangent, bitangent, normal) * ((2.f * sampled_normal - 1.f) * glm::vec3(1.f, 1.f, 1.f)));
 }
 
-void CMaterial::compute_lobe_probabilities(const glm::vec3& wo, const glm::vec3& color, float metallic, float transmission, const float& eta, float& diffuse, float& specular, float& transmittance) const
+void CMaterial::compute_lobe_probabilities(const glm::vec3& wo, const glm::vec3& color, float metallic, const float& eta, float& diffuse, float& specular, float& transmittance) const
 {
 	glm::vec3 f0 = glm::mix(f_schlick_eta(eta), color, metallic);
 	glm::vec3 fresnel = f_schlick(glm::abs(cos_theta(wo)), f0);
 
-	float diffuse_weight = (1.f - metallic) * (1.f - transmission);
-	float transmission_weight = (1.f - metallic) * transmission;
+	float diffuse_weight = (1.f - metallic) * (1.f - m_transmission);
+	float transmission_weight = (1.f - metallic) * m_transmission;
 
 	diffuse = math::max_component(color) * diffuse_weight;
 	specular = math::max_component(fresnel);

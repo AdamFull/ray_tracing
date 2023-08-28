@@ -24,8 +24,8 @@ struct FAxixAlignedBoundingBox
 
 	void grow(const FAxixAlignedBoundingBox& rhs)
 	{
-		m_min = math::min(m_min, rhs.m_min);
-		m_max = math::max(m_max, rhs.m_max);
+		m_min = glm::min(m_min, rhs.m_min);
+		m_max = glm::max(m_max, rhs.m_max);
 	}
 
 	float area()

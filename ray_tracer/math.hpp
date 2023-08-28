@@ -85,6 +85,17 @@ namespace math
 		return true;
 	}
 
+	template<class _Ty>
+	constexpr glm::vec<3, _Ty, glm::defaultp> lerp(const glm::vec<3, _Ty, glm::defaultp>& a, const glm::vec<3, _Ty, glm::defaultp>& b, _Ty t)
+	{
+		return (static_cast<_Ty>(1) - t) * a + t * b;
+	}
+
+	template<class _Ty>
+	constexpr bool is_normalized(const glm::vec<3, _Ty, glm::defaultp>& a)
+	{
+		return glm::abs(glm::length2(a) - static_cast<_Ty>(1)) < static_cast<_Ty>(1.0e-6);
+	}
 
 	inline __m128 _vec128_dot_product(const __m128& lhs, const __m128& rhs)
 	{
@@ -127,47 +138,6 @@ namespace math
 		return _mm_sub_ps(tmp3, tmp4);
 	}
 
-	inline float dot(const glm::vec3& a, const glm::vec3& b)
-	{
-		return a.x * b.x + a.y * b.y + a.z * b.z;
-	}
-
-	inline glm::vec3 normalize(const glm::vec3& vec)
-	{
-		return vec / static_cast<float>(fsqrt(dot(vec, vec)));
-	}
-
-
-	inline glm::vec3 apply_otb(const glm::vec3& t, const glm::vec3& b, const glm::vec3& n, const glm::vec3& v)
-	{
-		return v.x * t + v.y * b + v.z * n;
-	}
-
-	inline glm::vec3 min(const glm::vec3& lhs, const glm::vec3& rhs)
-	{
-#if defined(USE_INTRINSICS) && 0
-		auto _lhs = _mm_setr_ps(lhs.x, lhs.y, lhs.z, 0.f);
-		auto _rhs = _mm_setr_ps(rhs.x, rhs.y, rhs.z, 0.f);
-
-		auto _res = _mm_min_ps(_lhs, _rhs);
-		return glm::vec3(_res.m128_f32[0], _res.m128_f32[1], _res.m128_f32[2]);
-#else
-		return glm::min(lhs, rhs);
-#endif
-	}
-
-	inline glm::vec3 max(const glm::vec3& lhs, const glm::vec3& rhs)
-	{
-#if defined(USE_INTRINSICS) && 0
-		auto _lhs = _mm_setr_ps(lhs.x, lhs.y, lhs.z, 0.f);
-		auto _rhs = _mm_setr_ps(rhs.x, rhs.y, rhs.z, 0.f);
-
-		auto _res = _mm_max_ps(_lhs, _rhs);
-		return glm::vec3(_res.m128_f32[0], _res.m128_f32[1], _res.m128_f32[2]);
-#else
-		return glm::max(lhs, rhs);
-#endif
-	}
 
 	inline __m128 _mul_vec_to_mat(const __m128& vec, const __m128& r0, const __m128& r1, const __m128& r2)
 	{
@@ -349,7 +319,7 @@ namespace math
 	inline bool ray_triangle_intersect(const glm::vec3& r0, const glm::vec3& rd, const glm::vec3& e0, const glm::vec3& e1, const glm::vec3& v0, float& distance, glm::vec3& barycentric)
 	{
 		auto pvec = glm::cross(rd, e1);
-		auto det = dot(e0, pvec);
+		auto det = glm::dot(e0, pvec);
 
 		if (det < std::numeric_limits<float>::epsilon())
 			return false;
@@ -357,20 +327,20 @@ namespace math
 		auto inv_det = 1.f / det;
 
 		auto tvec = r0 - v0;
-		barycentric.y = dot(tvec, pvec) * inv_det;
+		barycentric.y = glm::dot(tvec, pvec) * inv_det;
 
 		if (barycentric.y < 0.f || barycentric.y > 1.f)
 			return false;
 
 		auto qvec = glm::cross(tvec, e0);
-		barycentric.z = dot(rd, qvec) * inv_det;
+		barycentric.z = glm::dot(rd, qvec) * inv_det;
 
 		if (barycentric.z < 0.f || barycentric.y + barycentric.z > 1.f)
 			return false;
 
 		barycentric.x = 1.f - barycentric.y - barycentric.z;
 
-		distance = dot(e1, qvec) * inv_det;
+		distance = glm::dot(e1, qvec) * inv_det;
 
 		return true;
 	}
