@@ -18,6 +18,8 @@ file(GLOB_RECURSE RESOURCES_SOURCE_FILES ray_tracer/resources/*.cpp ray_tracer/r
 file(GLOB ENGINE_SOURCE_FILES ray_tracer/*.cpp ray_tracer/*.hpp)
 file(GLOB MAIN_SOURCES *.cpp *.hpp *.h)
 
+set(MAIN_PROJECT_DIRECTORY_PATH ${CMAKE_CURRENT_SOURCE_DIR})
+
 find_package(benchmark CONFIG REQUIRED)
 
 enable_language(ASM_MASM)
@@ -53,6 +55,7 @@ target_compile_options(${PROJECT_NAME} PRIVATE "/fp:fast")
 
 target_compile_definitions(${PROJECT_NAME} PUBLIC
     GLM_FORCE_PURE
+    MAIN_PROJECT_DIRECTORY_PATH="${MAIN_PROJECT_DIRECTORY_PATH}"
 )
 
 target_precompile_headers(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/common.h)

@@ -620,7 +620,7 @@ void CScene::load_mesh_component(const entt::entity& target, const tinygltf::Nod
 		}
 
 		auto& material = m_pResourceManager->get_material(material_id);
-		bool is_light_emitter = material->can_emit_light();
+		bool is_light_emitter = material->can_emit_light() && !material->can_scatter_light();
 
 		for (uint32_t index = 0u; index < indexBuffer.size(); index += 3u)
 		{
@@ -662,6 +662,7 @@ void CScene::load_camera_component(const entt::entity& target, const tinygltf::N
 		cameraComponent.m_fov = camera.perspective.yfov;
 		cameraComponent.m_near = camera.perspective.znear;
 		cameraComponent.m_far = camera.perspective.zfar;
+		cameraComponent.m_aspect = camera.perspective.aspectRatio;
 	}
 
 	m_registry.emplace<FCameraComponent>(target, cameraComponent);

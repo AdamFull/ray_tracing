@@ -5,6 +5,8 @@
 #include "ecs/components/transform_component.h"
 #include "ecs/components/hierarchy_component.h"
 
+#include <glm/gtx/matrix_decompose.hpp>
+
 void CHierarchySystem::create(CRayEngine* engine)
 {
 	update(engine);
@@ -33,6 +35,10 @@ void CHierarchySystem::build_hierarchy(entt::registry& registry, const entt::ent
 		transform.m_model = parent_transform.m_model * transform.m_model;
 	}
 
+	glm::vec3 skew;
+	glm::vec4 persp;
+	glm::decompose(transform.m_model, transform.m_scale_g, transform.m_rotation_g, transform.m_position_g, skew, persp);
+
 	for (auto& child : hierarchy.children)
 		build_hierarchy(registry, child);
 
@@ -41,8 +47,5 @@ void CHierarchySystem::build_hierarchy(entt::registry& registry, const entt::ent
 
 void CHierarchySystem::initialize_matrix(FTransformComponent* transform)
 {
-	transform->m_model = glm::translate(glm::mat4(1.0f), transform->m_position);
-	transform->m_model *= glm::mat4_cast(glm::normalize(transform->m_rotation));
-	transform->m_model = glm::scale(transform->m_model, transform->m_scale);
-	transform->m_model *= transform->m_matrix;
+	transform->m_model = glm::translate(glm::mat4(1.0f), transform->m_position) * glm::mat4(transform->m_rotation) * glm::scale(glm::mat4(1.0f), transform->m_scale) * transform->m_matrix;
 }

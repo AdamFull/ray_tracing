@@ -5,8 +5,6 @@
 #include "ecs/components/transform_component.h"
 #include "ecs/components/camera_component.h"
 
-#include <glm/gtx/matrix_decompose.hpp>
-
 void CCameraSystem::create(CRayEngine* engine)
 {
 
@@ -30,21 +28,16 @@ void CCameraSystem::update_camera(entt::registry& registry, const glm::uvec2& ex
 {
 	bool needToRecalculateRays{ false };
 
-	glm::vec3 scale, translation, skew;
-	glm::quat rotation;
-	glm::vec4 persp;
-	glm::decompose(transform->m_model, scale, rotation, translation, skew, persp);
-
-	camera->m_forward = glm::normalize(glm::rotate(rotation, glm::vec3(0.f, 0.f, -1.f)));
+	camera->m_forward = glm::normalize(glm::rotate(transform->m_rotation_g, glm::vec3(0.f, 0.f, -1.f)));
 	camera->m_right = glm::normalize(glm::cross(camera->m_forward, glm::vec3{ 0.f, 1.f, 0.f }));
 	camera->m_up = glm::normalize(glm::cross(camera->m_right, camera->m_forward));
 
 	if (extent.x != camera->m_viewportExtent.x || extent.y != camera->m_viewportExtent.y)
 	{
-		camera->m_viewportExtent.x = extent.x;
+		camera->m_viewportExtent.x = camera->m_aspect * extent.y;
 		camera->m_viewportExtent.y = extent.y;
 
-		recalculate_projection(extent, camera);
+		recalculate_projection(camera);
 		needToRecalculateRays = true;
 	}
 
@@ -59,24 +52,19 @@ void CCameraSystem::update_camera(entt::registry& registry, const glm::uvec2& ex
 		recalculate_ray_directions(camera);
 }
 
-void CCameraSystem::recalculate_projection(const glm::uvec2& extent, FCameraComponent* camera)
+void CCameraSystem::recalculate_projection(FCameraComponent* camera)
 {
 	if (camera->m_type == ECameraType::eOrthographic)
 		camera->m_projection = glm::ortho(camera->m_xmag, camera->m_ymag, 0.f, 1.f, camera->m_near, camera->m_far);
 	else
-		camera->m_projection = glm::perspective(camera->m_fov, static_cast<float>(extent.x) / static_cast<float>(extent.y), camera->m_near, camera->m_far);
+		camera->m_projection = glm::perspective(camera->m_fov, camera->m_aspect, camera->m_near, camera->m_far);
 
 	camera->m_invProjection = glm::inverse(camera->m_projection);
 }
 
 void CCameraSystem::recalculate_view(FCameraComponent* camera, FTransformComponent* transform)
 {
-	glm::vec3 scale, translation, skew;
-	glm::quat rotation;
-	glm::vec4 persp;
-	glm::decompose(transform->m_model, scale, rotation, translation, skew, persp);
-
-	camera->m_view = glm::lookAt(translation, translation + camera->m_forward, camera->m_up);
+	camera->m_view = glm::lookAt(transform->m_position_g, transform->m_position_g + camera->m_forward, camera->m_up);
 	camera->m_invView = glm::inverse(camera->m_view);
 }
 

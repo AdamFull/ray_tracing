@@ -2,21 +2,22 @@
   "framebuffer": {
     "width": 1280,
     "height": 720,
+    "aspect_mode": "camera",
     "antialiasing": false
   },
   "output": {
     "image_name": "final.png"
   },
   "integrator": {
-    "sample_count": 50,
+    "sample_count": 32768,
     "bounce_count": 15,
-    "rr_threshold": 3
+    "rr_threshold": 5
   },
   "tonemapping": {
     "gamma": 2.2,
-    "exposure": 4.0
+    "exposure": 2.0
   },
   "scene": {
-    "path": "meshes/DamagedHelmet/glTF/DamagedHelmet.gltf"
+    "path": "D:\\GitHub\\ray_tracing\\meshes\\DamagedHelmet\\glTF\\DamagedHelmet.gltf"
   }
 }

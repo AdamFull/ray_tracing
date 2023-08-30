@@ -83,17 +83,49 @@ void CIntegrator::trace_ray(CScene* scene, FCameraComponent* camera, const glm::
 	sampler.begin(ray_index);
 
 	glm::vec4 final_color{ 0.f };
-	for (uint32_t sample = 1u; sample <= m_sampleCount; ++sample)
+	float deviation{ 0.f };
+	uint32_t num_samples{ 0u };
+	const uint32_t check_interval{ 64u };
+	float min_tolerance{ 0.05f };
+	float s1{ 0.f }, s2{ 0.f };
+
+	while(true)
+	//for (uint32_t sample = 1u; sample <= m_sampleCount; ++sample)
 	{
 		FRay ray{};
 		ray.m_origin = origin;
-		ray.set_direction(ray_direction);// +glm::vec3(sampler.sample(-0.0001f, 0.0001f), sampler.sample(-0.0001f, 0.0001f), sampler.sample(-0.0001f, 0.0001f)));
-		final_color += glm::vec4(integrate(scene, ray, m_bounceCount, sampler), 1.f);
+		ray.set_direction(ray_direction);
 
+		glm::vec4 sampled_color = glm::vec4(integrate(scene, ray, m_bounceCount, sampler), 1.f);
+		final_color += sampled_color;
+
+		//float luma = glm::dot(glm::vec3(0.2125f, 0.7154f, 0.0721f), glm::vec3(sampled_color));
+		float luma = glm::dot(glm::vec3(0.299f, 0.587f, 0.114f), glm::vec3(sampled_color));
+		s1 += luma;
+		s2 += luma * luma;
+
+		++num_samples;
 		sampler.next();
+
+		if (!(num_samples % check_interval))
+		{
+			float n = static_cast<float>(num_samples);
+
+			float u = s1 / n;
+			float deviation = glm::sqrt(1.f / (n - 1.f) * (s2 - s1 * s1 / n));
+
+			float I = 1.96f * deviation / glm::sqrt(n);
+
+			if (I <= min_tolerance * u)
+				break;
+		}
+
+		if (num_samples >= m_sampleCount)
+			break;
 	}
 
-	m_pFramebuffer->add_pixel(x, y, final_color / static_cast<float>(m_sampleCount));
+	m_pFramebuffer->add_pixel(x, y, final_color / static_cast<float>(num_samples));
+	//m_pFramebuffer->add_pixel(x, y, glm::vec4(glm::vec3(static_cast<float>(num_samples) / static_cast<float>(m_bounceCount)), 1.f));
 }
 
 glm::vec3 CIntegrator::integrate(CScene* scene, FRay ray, int32_t bounces, CCMGSampler& sampler)
@@ -154,7 +186,7 @@ glm::vec3 CIntegrator::integrate(CScene* scene, FRay ray, int32_t bounces, CCMGS
 				light_ray.set_direction(light_dir);
 
 				FHitResult light_hit_result{};
-				bool light_hit_something = scene->trace_ray(light_ray, 0.f, std::numeric_limits<float>::infinity(), light_hit_result);
+				bool light_hit_something = scene->trace_ray(light_ray, 0.001f, std::numeric_limits<float>::infinity(), light_hit_result);
 				if (light_hit_something && light_index == light_hit_result.m_primitive_id && light_hit_result.m_primitive_id != hit_result.m_primitive_id)
 				{
 					float bsdf_pdf = material->pdf(wi, wo, color, mr.x, mr.y);
@@ -173,19 +205,17 @@ glm::vec3 CIntegrator::integrate(CScene* scene, FRay ray, int32_t bounces, CCMGS
 		float bsdf_pdf{};
 		glm::vec3 wi = material->sample(wo, color, mr.x, mr.y, bsdf_sample.x, bsdf_sample.y, bsdf_pdf);
 		float cosThetaI = glm::abs(cos_theta(wi));
-		if (math::less_equal_float(cosThetaI, 0.f) || math::less_equal_float(bsdf_pdf, 0.f))
+		if (cosThetaI <= 0.f || bsdf_pdf <= 0.f)
 			break;
 
 		glm::vec3 bsdf = material->eval(wi, wo, color, mr.x, mr.y);
-		if (bsdf.x == 0.f && bsdf.y == 0.f && bsdf.z == 0.f)
-			break;
 
 		FRay light_ray{};
 		light_ray.m_origin = hit_result.m_position + math::sign(cos_theta(wi)) * normal * 0.001f;
 		light_ray.set_direction(basis.to_world(wi));
 
 		FHitResult light_hit_result{};
-		bool light_hit_something = scene->trace_ray(light_ray, 0.f, std::numeric_limits<float>::infinity(), light_hit_result);
+		bool light_hit_something = scene->trace_ray(light_ray, 0.001f, std::numeric_limits<float>::infinity(), light_hit_result);
 		if (light_hit_something && light_index == light_hit_result.m_primitive_id && light_hit_result.m_primitive_id != hit_result.m_primitive_id)
 		{
 			if (light)

@@ -12,6 +12,7 @@ struct FCameraComponent
 {
 	ECameraType m_type{ ECameraType::ePerspective };
 
+	float m_aspect{ 1.77f };
 	float m_fov{ 45.f };
 	float m_near{ 0.1f };
 	float m_far{ 100.f };

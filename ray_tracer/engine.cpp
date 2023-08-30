@@ -1,6 +1,7 @@
 #include "engine.h"
 
 #include "ecs/systems/systems.h"
+#include "ecs/components/camera_component.h"
 
 #include <configuration.h>
 
@@ -10,12 +11,24 @@ void CRayEngine::create()
 
 	m_pResourceManager = std::make_unique<CResourceManager>();
 
-	m_pRenderer = std::make_unique<CIntegrator>(m_pResourceManager.get());
-	m_pRenderer->create(config.m_fbcfg.m_width, config.m_fbcfg.m_height, config.m_icfg.m_sample_count, config.m_icfg.m_bounce_count, config.m_icfg.m_rr_threshold);
-
 	m_pScene = std::make_unique<CScene>(m_pResourceManager.get());
-	
 	m_pScene->create(config.m_scfg.m_scene_path);
+
+	auto& registry = m_pScene->get_registry();
+
+	FCameraComponent* current_camera{ nullptr };
+	auto view = registry.view<FCameraComponent>();
+	for (auto [entity, camera] : view.each())
+	{
+		current_camera = &camera;
+		break;
+	}
+
+	uint32_t height = config.m_fbcfg.m_height;
+	uint32_t width = current_camera->m_aspect * height;
+
+	m_pRenderer = std::make_unique<CIntegrator>(m_pResourceManager.get());
+	m_pRenderer->create(width, height, config.m_icfg.m_sample_count, config.m_icfg.m_bounce_count, config.m_icfg.m_rr_threshold);
 
 	// Create systems
 	m_vSystems.emplace_back(std::make_unique<CHierarchySystem>());

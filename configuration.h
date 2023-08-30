@@ -6,6 +6,8 @@ struct FFramebufferConfig
 {
 	uint32_t m_width{ 1280u };
 	uint32_t m_height{ 720u };
+	float m_aspect_ratio{ 1.777777779f };
+	std::string m_aspect_mode{ "config" }; // camera - use aspect from camera, config - use aspect from config, none - calculate aspect from resolution
 	bool m_antialiasing{ false };
 };
 

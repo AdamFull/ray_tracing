@@ -58,7 +58,7 @@ glm::vec3 CMaterial::sample(const glm::vec3& wo, const glm::vec3& color, float m
 	{
 		u = math::remap(u, 0.0f, diffuse_weight - std::numeric_limits<float>::epsilon(), 0.0f, 1.f - std::numeric_limits<float>::epsilon());
 		assert(u >= 0.0f && u < 1.0f);
-
+	
 		wi = math::sign(cos_theta(wo)) * CCMGSampler::sample_cosine_hemisphere(u, v);
 		assert(math::is_normalized(wi));
 	}
@@ -66,12 +66,12 @@ glm::vec3 CMaterial::sample(const glm::vec3& wo, const glm::vec3& color, float m
 	{
 		u = math::remap(u, diffuse_weight, diffuse_weight + specular_weight - std::numeric_limits<float>::epsilon(), 0.0f, 1.f - std::numeric_limits<float>::epsilon());
 		assert(u >= 0.0f && u < 1.0f);
-
+	
 		glm::vec3 wo_upper = math::sign(cos_theta(wo)) * wo;
 		glm::vec3 wh = math::sign(cos_theta(wo)) * CCMGSampler::sample_ggx_vndf(wo_upper, alpha, u, v);
 		if (glm::dot(wo, wh) < 0.0f)
 			return glm::vec3(0.0f);
-
+	
 		wi = glm::reflect(wo, wh);
 		if (!on_same_hemisphere(wi, wo))
 			return glm::vec3(0.0f);
@@ -80,18 +80,18 @@ glm::vec3 CMaterial::sample(const glm::vec3& wo, const glm::vec3& color, float m
 	{
 		u = math::remap(u, diffuse_weight + specular_weight, 1.f - std::numeric_limits<float>::epsilon(), 0.0f, 1.f - std::numeric_limits<float>::epsilon());
 		assert(u >= 0.0f && u < 1.0f);
-
+	
 		glm::vec3 wo_upper = math::sign(cos_theta(wo)) * wo;
 		glm::vec3 wh = math::sign(cos_theta(wo)) * CCMGSampler::sample_ggx_vndf(wo_upper, alpha, u, v);
 		if (glm::dot(wo, wh) < 0.0f)
 			return glm::vec3(0.0f);
-
+	
 		if (!math::refract(wo, wh, eta, wi))
 			return glm::vec3(0.0f);
-
+	
 		if (on_same_hemisphere(wi, wo))
 			return glm::vec3(0.0f);
-
+	
 		if (glm::dot(wo, wh) * glm::dot(wi, wh) > 0.0f)
 			return glm::vec3(0.0f);
 	}
@@ -105,6 +105,9 @@ glm::vec3 CMaterial::eval(const glm::vec3& wi, const glm::vec3& wo, const glm::v
 {
 	float eta = cos_theta(wo) > 0.f ? 1.f / m_ior : m_ior;
 	glm::vec3 f0 = glm::mix(f_schlick_eta(eta), color, metallic);
+
+	//if (metallic > 0.f)
+	//	return glm::vec3(1.f, 0.f, 0.f);
 
 	glm::vec3 diffuse = lambert_diffuse(wi, wo, color);
 	glm::vec3 specular = microfacet_reflection_ggx(wi, wo, f0, eta, alpha);

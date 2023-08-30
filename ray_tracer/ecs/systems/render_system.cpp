@@ -28,11 +28,11 @@ void CRenderSystem::update(CRayEngine* engine)
 	{
 		current_camera = &camera;
 		camera_transform = &transform;
+		break;
 	}
 
 	if (!current_camera || !camera_transform)
 		return;
 
-	glm::vec3 origin{ camera_transform->m_position.x, camera_transform->m_position.y, camera_transform->m_position.z };
-	renderer->trace_ray(scene.get(), current_camera, origin);
+	renderer->trace_ray(scene.get(), current_camera, camera_transform->m_position_g);
 }
