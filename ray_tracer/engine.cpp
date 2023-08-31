@@ -28,7 +28,7 @@ void CRayEngine::create()
 	uint32_t width = current_camera->m_aspect * height;
 
 	m_pRenderer = std::make_unique<CIntegrator>(m_pResourceManager.get());
-	m_pRenderer->create(width, height, config.m_icfg.m_sample_count, config.m_icfg.m_bounce_count, config.m_icfg.m_rr_threshold);
+	m_pRenderer->create(width, height, config.m_icfg.m_sample_count);
 
 	// Create systems
 	m_vSystems.emplace_back(std::make_unique<CHierarchySystem>());

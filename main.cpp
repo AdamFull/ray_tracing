@@ -31,6 +31,8 @@ int main(int argc, char** argv)
 	config.m_icfg.m_sample_count = argparse.try_get("--samples", config.m_icfg.m_sample_count);
 	config.m_icfg.m_bounce_count = argparse.try_get("--bounces", config.m_icfg.m_bounce_count);
 	config.m_icfg.m_rr_threshold = argparse.try_get("--rr", config.m_icfg.m_rr_threshold);
+	config.m_icfg.m_use_estimator = argparse.exists("--use_estimator") ? true : config.m_icfg.m_use_estimator;
+	config.m_icfg.m_estimator_tolerance = argparse.try_get("--tolerance", config.m_icfg.m_estimator_tolerance);
 
 	log_info("Configuration loaded by {}s", timer.stop<float>());
 

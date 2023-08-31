@@ -21,6 +21,10 @@ struct FIntegratorConfig
 	uint32_t m_sample_count{ 5u };
 	uint32_t m_bounce_count{ 15u };
 	uint32_t m_rr_threshold{ 3u };
+
+	// Estimator settings
+	bool m_use_estimator{ false };
+	float m_estimator_tolerance{ 0.05f };
 };
 
 struct FTonemapConfig
@@ -29,9 +33,19 @@ struct FTonemapConfig
 	float m_exposure{ 4.f };
 };
 
+struct FSkyboxConfig
+{
+	struct FGradient {
+		glm::vec3 m_begin;
+		glm::vec3 m_end;
+	} m_gradient;
+	glm::vec3 m_solid_color;
+};
+
 struct FSceneConfig
 {
 	std::string m_scene_path{};
+	FSkyboxConfig m_skybox{};
 };
 
 struct FConfiguration

@@ -117,15 +117,15 @@ glm::vec2 CCMGSampler::sample_vec2() noexcept
 	return glm::vec2(x, y);
 }
 
-glm::vec3 CCMGSampler::sample_cosine_hemisphere(float u, float v) noexcept
+glm::vec3 CCMGSampler::sample_cosine_hemisphere(const glm::vec2& sample) noexcept
 {
-	float cosTheta = glm::sqrt(glm::max(0.0f, 1.0f - u));
-	float sinTheta = glm::sqrt(u);
-	float phi = 2.0f * std::numbers::pi_v<float> * v;
+	float cosTheta = glm::sqrt(glm::max(0.0f, 1.0f - sample.s));
+	float sinTheta = glm::sqrt(sample.s);
+	float phi = 2.0f * std::numbers::pi_v<float> * sample.t;
 	return glm::vec3(sinTheta * glm::cos(phi), sinTheta * glm::sin(phi), cosTheta);
 }
 
-glm::vec3 CCMGSampler::sample_ggx_vndf(const glm::vec3& wo, float alpha, float u, float v) noexcept
+glm::vec3 CCMGSampler::sample_ggx_vndf(const glm::vec3& wo, const glm::vec2& sample, float alpha) noexcept
 {
 	// Transform view direction to hemisphere configuration
 	glm::vec3 woHemi = glm::normalize(glm::vec3(alpha * wo.x, alpha * wo.y, wo.z));
@@ -138,8 +138,8 @@ glm::vec3 CCMGSampler::sample_ggx_vndf(const glm::vec3& wo, float alpha, float u
 	glm::vec3 b2 = glm::cross(woHemi, b1);
 
 	// Parameterization of projected area
-	float r = glm::sqrt(u);
-	float phi = 2.0f * std::numbers::pi_v<float> * v;
+	float r = glm::sqrt(sample.s);
+	float phi = 2.0f * std::numbers::pi_v<float> * sample.t;
 	float t1 = r * glm::cos(phi);
 	float t2 = r * glm::sin(phi);
 	float s = 0.5f * (1.0f + woHemi.z);

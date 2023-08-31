@@ -3,6 +3,8 @@
 #include <uparse.hpp>
 #include <fstream>
 
+#include <glm/gtc/type_ptr.hpp>
+
 namespace fs = std::filesystem;
 
 void to_json(nlohmann::json& json, const FFramebufferConfig& type)
@@ -36,6 +38,9 @@ void to_json(nlohmann::json& json, const FIntegratorConfig& type)
 	utl::serialize_to("sample_count", json, type.m_sample_count, type.m_sample_count > 1u);
 	utl::serialize_to("bounce_count", json, type.m_bounce_count, type.m_bounce_count > 3u);
 	utl::serialize_to("rr_threshold", json, type.m_rr_threshold, type.m_rr_threshold != 3u);
+
+	utl::serialize_to("use_estimator", json, type.m_use_estimator, type.m_use_estimator);
+	utl::serialize_to("estimator_tolerance", json, type.m_estimator_tolerance, true);
 }
 
 void from_json(const nlohmann::json& json, FIntegratorConfig& type)
@@ -43,6 +48,9 @@ void from_json(const nlohmann::json& json, FIntegratorConfig& type)
 	utl::parse_from("sample_count", json, type.m_sample_count);
 	utl::parse_from("bounce_count", json, type.m_bounce_count);
 	utl::parse_from("rr_threshold", json, type.m_rr_threshold);
+
+	utl::parse_from("use_estimator", json, type.m_use_estimator);
+	utl::parse_from("estimator_tolerance", json, type.m_estimator_tolerance);
 }
 
 
@@ -59,14 +67,65 @@ void from_json(const nlohmann::json& json, FTonemapConfig& type)
 }
 
 
+void to_json(nlohmann::json& json, const FSkyboxConfig::FGradient& type)
+{
+	float tmp[3ull];
+	memcpy(tmp, glm::value_ptr(type.m_begin), 3ull * sizeof(float));
+	json["begin"] = tmp;
+
+	memcpy(tmp, glm::value_ptr(type.m_end), 3ull * sizeof(float));
+	json["end"] = tmp;
+}
+
+void from_json(const nlohmann::json& json, FSkyboxConfig::FGradient& type)
+{
+	float tmp[3ull];
+	if (auto obj = json.find("begin"); obj != json.end())
+	{
+		obj->get_to(tmp);
+		type.m_begin = glm::make_vec3(tmp);
+	}
+
+	if (auto obj = json.find("end"); obj != json.end())
+	{
+		obj->get_to(tmp);
+		type.m_end = glm::make_vec3(tmp);
+	}
+}
+
+
+void to_json(nlohmann::json& json, const FSkyboxConfig& type)
+{
+	utl::serialize_to("gradient", json, type.m_gradient, true);
+
+	float tmp[3ull];
+	memcpy(tmp, glm::value_ptr(type.m_solid_color), 3ull * sizeof(float));
+	json["solid_color"] = tmp;
+}
+
+void from_json(const nlohmann::json& json, FSkyboxConfig& type)
+{
+	utl::parse_from("gradient", json, type.m_gradient);
+	
+	float tmp[3ull];
+	if (auto obj = json.find("end"); obj != json.end())
+	{
+		obj->get_to(tmp);
+		type.m_solid_color = glm::make_vec3(tmp);
+	}
+}
+
+
 void to_json(nlohmann::json& json, const FSceneConfig& type)
 {
 	utl::serialize_to("path", json, type.m_scene_path, true);
+	utl::serialize_to("skybox", json, type.m_skybox, true);
 }
 
 void from_json(const nlohmann::json& json, FSceneConfig& type)
 {
 	utl::parse_from("path", json, type.m_scene_path);
+	utl::parse_from("skybox", json, type.m_skybox);
 }
 
 

@@ -5,7 +5,7 @@
 #include "tonemapping.hpp"
 #include "configuration.h"
 
-#define UNCHARTED_TONEMAP
+//#define UNCHARTED_TONEMAP
 //#define ANOTHER_TONEMAP
 
 inline glm::vec3 linear_to_srgb(const glm::vec3& linearRGB)

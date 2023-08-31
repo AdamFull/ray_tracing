@@ -9,15 +9,24 @@
     "image_name": "final.png"
   },
   "integrator": {
-    "sample_count": 32768,
-    "bounce_count": 15,
-    "rr_threshold": 5
+    "sample_count": 50,
+    "bounce_count": 10,
+    "rr_threshold": 3,
+
+    "use_estimator": false,
+    "estimator_tolerance": 0.05
   },
   "tonemapping": {
     "gamma": 2.2,
     "exposure": 2.0
   },
   "scene": {
-    "path": "D:\\GitHub\\ray_tracing\\meshes\\DamagedHelmet\\glTF\\DamagedHelmet.gltf"
+    "path": "D:\\GitHub\\ray_tracing\\meshes\\Duck2\\Duck.glb",
+    "skybox": {
+      "gradient": {
+        "begin": [ 1.0, 1.0, 1.0 ],
+        "end": [ 0.5, 0.7, 1.0 ]
+      }
+    }
   }
 }

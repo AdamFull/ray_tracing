@@ -17,7 +17,7 @@ public:
 	const glm::vec3 centroid() const;
 	resource_id_t get_material_id() const;
 
-	glm::vec3 sample(const glm::vec3& p, float s, float t, float& pdf) const;
+	glm::vec3 sample(const glm::vec3& p, const glm::vec2& sample, float& pdf) const;
 
 private:
 	FAxixAlignedBoundingBox m_aabb{};

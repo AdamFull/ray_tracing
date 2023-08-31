@@ -1,10 +1,10 @@
 #include "hittable.h"
 #include "ecs/components/transform_component.h"
 
-glm::vec2 sample_uniform_triangle(float s, float t)
+glm::vec2 sample_uniform_triangle(const glm::vec2& sample)
 {
-	float a = glm::sqrt(s);
-	return glm::vec2(1.f - a, t * a);
+	float a = glm::sqrt(sample.s);
+	return glm::vec2(1.f - a, sample.t * a);
 }
 
 void pretransform(const glm::mat4& tm, glm::vec3& v0, glm::vec3& v1, glm::vec3& v2, bool normalize = false)
@@ -183,7 +183,7 @@ float CTriangle::pdf(const glm::vec3& p, const glm::vec3& wi) const
 		return 0.f;
 
 	float cosThetaI = glm::dot(-wi, hit_result.m_normal);
-	if (math::less_equal_float(cosThetaI, 0.f))
+	if (cosThetaI <= 0.f)
 		return 0.f;
 
 	float square_dist = glm::length2(hit_result.m_position - p);
@@ -205,9 +205,9 @@ resource_id_t CTriangle::get_material_id() const
 	return m_material_id;
 }
 
-glm::vec3 CTriangle::sample(const glm::vec3& p, float s, float t, float& pdf) const
+glm::vec3 CTriangle::sample(const glm::vec3& p, const glm::vec2& sample, float& pdf) const
 {
-	glm::vec2 uv = sample_uniform_triangle(s, t);
+	glm::vec2 uv = sample_uniform_triangle(sample);
 	float w = (1.f - uv.x - uv.y);
 	glm::vec3 q = uv.x * m_v0.m_position + uv.y * m_v1.m_position + w * m_v2.m_position;
 	glm::vec3 dir = glm::normalize(q - p);
