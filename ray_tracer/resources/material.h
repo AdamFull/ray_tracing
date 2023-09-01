@@ -35,7 +35,7 @@ struct FMaterialCreateInfo
 	float m_emissiveStrength{ 1.f };
 
 	float m_fRoughnessFactor{ 1.f };
-	float m_fMetallicFactor{ 0.f };
+	float m_fMetallicFactor{ 1.f };
 
 	float m_fIor{ 1.5f };
 	float m_fTransmission{ 0.f };
@@ -106,7 +106,7 @@ protected:
 
 	glm::vec3 m_albedo{1.f};
 
-	float m_metallic{ 0.f };
+	float m_metallic{ 1.f };
 	float m_roughness{ 1.f };
 
 	glm::vec3 m_emissive{};

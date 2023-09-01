@@ -21,7 +21,7 @@
     "exposure": 2.0
   },
   "scene": {
-    "path": "D:\\GitHub\\ray_tracing\\meshes\\Duck2\\Duck.glb",
+    "path": "D:\\GitHub\\ray_tracing\\meshes\\DamagedHelmet\\glTF\\DamagedHelmet.gltf",
     "skybox": {
       "gradient": {
         "begin": [ 1.0, 1.0, 1.0 ],

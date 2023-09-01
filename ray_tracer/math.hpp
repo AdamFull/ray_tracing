@@ -64,6 +64,12 @@ namespace math
 		return std::copysign(1.f, a);
 	}
 
+	template <typename _Ty>
+	inline constexpr const glm::vec<3, _Ty, glm::defaultp> reflect(const glm::vec<3, _Ty, glm::defaultp>& wi, const glm::vec<3, _Ty, glm::defaultp>& n) 
+	{
+		return static_cast<_Ty>(2) * glm::dot(wi, n) * n - wi;
+	}
+
 	template<class _Ty>
 	constexpr inline _Ty remap(_Ty value, _Ty low1, _Ty high1, _Ty low2, _Ty high2) noexcept
 	{

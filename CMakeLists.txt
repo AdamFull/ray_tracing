@@ -51,7 +51,11 @@ ${CMAKE_CURRENT_SOURCE_DIR}/ray_tracer/
 ${CMAKE_CURRENT_SOURCE_DIR}/ray_tracer/lib/glm
 )
 
-target_compile_options(${PROJECT_NAME} PRIVATE "/fp:fast")
+#target_compile_options(${PROJECT_NAME} PRIVATE "/fp:fast" "/Qpar" "/Qpar-report:1")
+
+#add_compile_options(/fp:fast)
+#add_compile_options(Qpar)
+#add_compile_options(/Qvec-report:2)
 
 target_compile_definitions(${PROJECT_NAME} PUBLIC
     GLM_FORCE_PURE

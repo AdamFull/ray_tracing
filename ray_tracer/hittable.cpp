@@ -67,72 +67,6 @@ void CTriangle::create()
 bool CTriangle::hit(const FRay& ray, float t_min, float t_max, FHitResult& hit_result) const
 {
 	float dist{ hit_result.m_distance };
-#if 0
-	__m128 w, u, v;
-	if (math::ray_triangle_intersect(ray.m_origin, ray.m_direction, m_e0, m_e1, m_v0.m_position, dist, w, u, v))
-	{
-		if (dist >= t_min && dist <= t_max)
-		{
-			hit_result.m_distance = dist;
-			hit_result.m_position = ray.at(dist);
-
-			float buf[4ull];
-
-			_mm_store_ps(buf, _mm_add_ps(
-				_mm_mul_ps(w,
-					_mm_setr_ps(m_v0.m_color.x, m_v0.m_color.y, m_v0.m_color.z, 0.f)),
-				_mm_add_ps(
-					_mm_mul_ps(u,
-						_mm_setr_ps(m_v1.m_color.x, m_v1.m_color.y, m_v1.m_color.z, 0.f)),
-					_mm_mul_ps(v,
-						_mm_setr_ps(m_v2.m_color.x, m_v2.m_color.y, m_v2.m_color.z, 0.f)))));
-
-			hit_result.m_color = glm::vec3(buf[0ull], buf[1ull], buf[2ull]);
-
-			_mm_store_ps(buf, _mm_add_ps(
-				_mm_mul_ps(w,
-					_mm_setr_ps(m_v0.m_normal.x, m_v0.m_normal.y, m_v0.m_normal.z, 0.f)),
-				_mm_add_ps(
-					_mm_mul_ps(u,
-						_mm_setr_ps(m_v1.m_normal.x, m_v1.m_normal.y, m_v1.m_normal.z, 0.f)),
-					_mm_mul_ps(v,
-						_mm_setr_ps(m_v2.m_normal.x, m_v2.m_normal.y, m_v2.m_normal.z, 0.f)))));
-
-			hit_result.set_face_normal(ray, glm::normalize(m_normal * glm::vec3(buf[0ull], buf[1ull], buf[2ull])));
-
-			_mm_store_ps(buf, _mm_add_ps(
-				_mm_mul_ps(w,
-					_mm_setr_ps(m_v0.m_texcoord.x, m_v0.m_texcoord.y, 0.f, 0.f)),
-				_mm_add_ps(
-					_mm_mul_ps(u,
-						_mm_setr_ps(m_v1.m_texcoord.x, m_v1.m_texcoord.y, 0.f, 0.f)),
-					_mm_mul_ps(v,
-						_mm_setr_ps(m_v2.m_texcoord.x, m_v2.m_texcoord.y, 0.f, 0.f)))));
-
-			hit_result.m_texcoord = glm::vec2(buf[0ull], buf[1ull]);
-
-			_mm_store_ps(buf, _mm_add_ps(
-				_mm_mul_ps(w,
-					_mm_setr_ps(m_v0.m_tangent.x, m_v0.m_tangent.y, m_v0.m_tangent.z, m_v0.m_tangent.w)),
-				_mm_add_ps(
-					_mm_mul_ps(u,
-						_mm_setr_ps(m_v1.m_tangent.x, m_v1.m_tangent.y, m_v1.m_tangent.z, m_v1.m_tangent.w)),
-					_mm_mul_ps(v,
-						_mm_setr_ps(m_v2.m_tangent.x, m_v2.m_tangent.y, m_v2.m_tangent.z, m_v1.m_tangent.w)))));
-
-			glm::vec4 tangent = { buf[0ull], buf[1ull], buf[2ull], buf[3ull] };
-
-			hit_result.m_tangent = glm::normalize(m_normal * glm::vec3(tangent));
-
-			hit_result.m_bitangent = glm::normalize(glm::cross(hit_result.m_normal, glm::vec3(tangent)) * tangent.w);
-
-			// Set material
-			hit_result.m_material_id = m_material_id;
-
-			return true;
-		}
-	}
-#else
 	glm::vec3 barycentric{};
 	if(math::ray_triangle_intersect(ray.m_origin, ray.m_direction, m_e0, m_e1, m_v0.m_position, dist, barycentric))
 	{
@@ -165,7 +99,6 @@ bool CTriangle::hit(const FRay& ray, float t_min, float t_max, FHitResult& hit_r
 			return true;
 		}
 	}
-#endif
 
 	return false;
 }
@@ -217,7 +150,7 @@ glm::vec3 CTriangle::sample(const glm::vec3& p, const glm::vec2& sample, float& 
 
 	float cosThetaI = glm::dot(-dir, normal);
 
-	if (math::less_equal_float(cosThetaI, 0.f))
+	if (cosThetaI <= 0.f)
 		pdf = 0.f;
 	else
 		pdf = glm::length2(q - p) / cosThetaI;

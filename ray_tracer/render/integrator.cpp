@@ -11,7 +11,9 @@
 
 float balance_heuristic(float pdfF, float pdfG)
 {
-	return pdfF / (pdfF + pdfG);
+	float f_sq = pdfF * pdfF;
+	float g_sq = pdfG * pdfG;
+	return f_sq / (f_sq + g_sq);
 }
 
 glm::vec3 ray_color(const FRay& ray, const glm::vec3& cbegin, const glm::vec3& cend)
@@ -80,7 +82,7 @@ void CIntegrator::trace_ray(CScene* scene, FCameraComponent* camera, const glm::
 	{
 		FRay ray{};
 		ray.m_origin = origin;
-		ray.set_direction(ray_direction);
+		ray.set_direction(ray_direction);// +glm::vec3(sampler.sample(-0.001f, 0.001f), sampler.sample(-0.001f, 0.001f), sampler.sample(-0.001f, 0.001f)));
 
 		glm::vec4 sampled_color = glm::vec4(integrate(scene, ray, m_bounceCount, sampler), 1.f);
 		final_color += sampled_color;
@@ -116,7 +118,6 @@ void CIntegrator::trace_ray(CScene* scene, FCameraComponent* camera, const glm::
 	}
 
 	m_pFramebuffer->add_pixel(x, y, final_color / static_cast<float>(actual_sample_count));
-	//m_pFramebuffer->add_pixel(x, y, glm::vec4(glm::vec3(static_cast<float>(num_samples) / static_cast<float>(m_bounceCount)), 1.f));
 }
 
 glm::vec3 CIntegrator::integrate(CScene* scene, FRay ray, int32_t bounces, CCMGSampler& sampler)
@@ -197,7 +198,10 @@ glm::vec3 CIntegrator::integrate(CScene* scene, FRay ray, int32_t bounces, CCMGS
 					if (bsdf_pdf > 0.f)
 					{
 						auto& light_material = m_pResourceManager->get_material(light->get_material_id());
-						out_color += throughput * light_material->emit(direct_hit) * material->eval(wi, wo, diffuse, mr) * cos_theta_i * balance_heuristic(light_pdf, bsdf_pdf) / (light_pdf * light_probability);
+						auto emittance = light_material->emit(direct_hit);
+						auto bsdf = material->eval(wi, wo, diffuse, mr);
+						float weight = balance_heuristic(light_pdf, bsdf_pdf);
+						out_color += throughput * emittance * bsdf * cos_theta_i * weight / (light_pdf * light_probability);
 					}
 				}
 			}
@@ -226,7 +230,9 @@ glm::vec3 CIntegrator::integrate(CScene* scene, FRay ray, int32_t bounces, CCMGS
 				if (light_pdf > 0.f)
 				{
 					auto& light_material = m_pResourceManager->get_material(light->get_material_id());
-					out_color += throughput * light_material->emit(indirect_hit) * bsdf * cos_theta_i * balance_heuristic(bsdf_pdf, light_pdf) / (bsdf_pdf * light_probability);
+					auto emittance = light_material->emit(indirect_hit);
+					float weight = balance_heuristic(bsdf_pdf, light_pdf);
+					out_color += throughput * emittance * bsdf * cos_theta_i * weight / (bsdf_pdf * light_probability);
 				}
 			}
 		}

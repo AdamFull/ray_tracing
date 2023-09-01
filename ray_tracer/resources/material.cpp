@@ -5,7 +5,7 @@
 
 #include "render/rsampler.h"
 
-glm::vec3 srgb_to_linear(glm::vec3 srgbIn)
+inline glm::vec3 srgb_to_linear(glm::vec3 srgbIn)
 {
 	glm::vec3 bLess = glm::step(glm::vec3(0.04045f), srgbIn);
 	return glm::mix(srgbIn / glm::vec3(12.92f), glm::pow((srgbIn + glm::vec3(0.055f)) / glm::vec3(1.055f), glm::vec3(2.4f)), bLess);
@@ -55,6 +55,8 @@ glm::vec3 CMaterial::sample(const glm::vec3& wo, const glm::vec2& sample, const 
 	float diffuse_weight, specular_weight, transmittance_weight;
 	compute_lobe_probabilities(wo, color, metallicRoughness.r, eta, diffuse_weight, specular_weight, transmittance_weight);
 
+	constexpr const float one_minus_alpha = 1.f - std::numeric_limits<float>::epsilon();
+
 	glm::vec3 wi{};
 
 	float u = sample.x;
@@ -62,39 +64,39 @@ glm::vec3 CMaterial::sample(const glm::vec3& wo, const glm::vec2& sample, const 
 
 	if (u < diffuse_weight)
 	{
-		u = math::remap(u, 0.0f, diffuse_weight - std::numeric_limits<float>::epsilon(), 0.0f, 1.f - std::numeric_limits<float>::epsilon());
-
+		u = math::remap(u, 0.0f, diffuse_weight - std::numeric_limits<float>::epsilon(), 0.0f, one_minus_alpha);
+	
 		wi = glm::sign(cos_theta(wo)) * CCMGSampler::sample_cosine_hemisphere(glm::vec2(u, v));
 		assert(math::is_normalized(wi));
 	}
 	else if (u < diffuse_weight + specular_weight)
 	{
-		u = math::remap(u, diffuse_weight, diffuse_weight + specular_weight - std::numeric_limits<float>::epsilon(), 0.0f, 1.f - std::numeric_limits<float>::epsilon());
+		u = math::remap(u, diffuse_weight, diffuse_weight + specular_weight - std::numeric_limits<float>::epsilon(), 0.0f, one_minus_alpha);
 
 		glm::vec3 wo_upper = glm::sign(cos_theta(wo)) * wo;
 		glm::vec3 wh = glm::sign(cos_theta(wo)) * CCMGSampler::sample_ggx_vndf(wo_upper, glm::vec2(u, v), metallicRoughness.g);
 		if (glm::dot(wo, wh) < 0.0f)
 			return glm::vec3(0.0f);
 
-		wi = glm::reflect(wo, wh);
+		wi = math::reflect(wo, wh);
 		if (!on_same_hemisphere(wi, wo))
 			return glm::vec3(0.0f);
 	}
 	else
 	{
-		u = math::remap(u, diffuse_weight + specular_weight, 1.f - std::numeric_limits<float>::epsilon(), 0.0f, 1.f - std::numeric_limits<float>::epsilon());
-
+		u = math::remap(u, diffuse_weight + specular_weight, one_minus_alpha, 0.0f, one_minus_alpha);
+	
 		glm::vec3 wo_upper = glm::sign(cos_theta(wo)) * wo;
 		glm::vec3 wh = glm::sign(cos_theta(wo)) * CCMGSampler::sample_ggx_vndf(wo_upper, glm::vec2(u, v), metallicRoughness.g);
 		if (glm::dot(wo, wh) < 0.0f)
 			return glm::vec3(0.0f);
-
+	
 		if (!math::refract(wo, wh, eta, wi))
 			return glm::vec3(0.0f);
-
+	
 		if (on_same_hemisphere(wi, wo))
 			return glm::vec3(0.0f);
-
+	
 		if (glm::dot(wo, wh) * glm::dot(wi, wh) > 0.0f)
 			return glm::vec3(0.0f);
 	}
@@ -122,10 +124,10 @@ glm::vec3 CMaterial::eval(const glm::vec3& wi, const glm::vec3& wo, const glm::v
 float CMaterial::pdf(const glm::vec3& wi, const glm::vec3& wo, const glm::vec3& color, const glm::vec2& metallicRoughness) const
 {
 	float eta = cos_theta(wo) > 0.f ? 1.f / m_ior : m_ior;
-	float diffuse_weight, specular_weight, transmittance_weight;
-	compute_lobe_probabilities(wo, color, metallicRoughness.r, eta, diffuse_weight, specular_weight, transmittance_weight);
+	float diffuse_weight, specular_weight, transmission_weight;
+	compute_lobe_probabilities(wo, color, metallicRoughness.r, eta, diffuse_weight, specular_weight, transmission_weight);
 
-	return diffuse_weight * cosine_weighted_pdf(wi, wo) + specular_weight * ggx_vndf_reflection_pdf(wi, wo, metallicRoughness.g) + transmittance_weight * ggx_vndf_transmission_pdf(wi, wo, eta, metallicRoughness.g);
+	return diffuse_weight * cosine_weighted_pdf(wi, wo) + specular_weight * ggx_vndf_reflection_pdf(wi, wo, metallicRoughness.g) + transmission_weight * ggx_vndf_transmission_pdf(wi, wo, eta, metallicRoughness.g);
 }
 
 glm::vec3 CMaterial::sample_surface_normal(const FHitResult& hit_result) const
@@ -152,9 +154,9 @@ glm::vec2 CMaterial::sample_surface_metallic_roughness(const FHitResult& hit_res
 	{
 		auto sampled_mr = glm::vec3(sample_texture(ETextureType::eMetallRoughness, hit_result.m_texcoord));
 
-		mr.y = mr.y * sampled_mr.y;
-		mr.y = glm::max(0.001f, mr.y * mr.y);
-		mr.x = mr.x > 0.f ? mr.x * sampled_mr.z : sampled_mr.z;
+		mr.g = mr.g * sampled_mr.g;
+		mr.g = glm::max(0.001f, mr.g * mr.g);
+		mr.r = mr.r * sampled_mr.b;
 	}
 
 	return mr;
