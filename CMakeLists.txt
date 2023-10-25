@@ -1,5 +1,11 @@
 cmake_minimum_required(VERSION 3.18.0)
-project(ray_tracer)
+
+#set(CMAKE_C_COMPILER "icx")
+#set(CMAKE_CXX_COMPILER "icx")
+#set(CMAKE_CXX_FLAGS_RELEASE "-O3 -ipo -mavx -axCORE-AVX2,CORE-AVX512 -w")
+#set(CMAKE_CXX_FLAGS_DEBUG "-g")
+
+project(ray_tracer LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -20,9 +26,9 @@ file(GLOB MAIN_SOURCES *.cpp *.hpp *.h)
 
 set(MAIN_PROJECT_DIRECTORY_PATH ${CMAKE_CURRENT_SOURCE_DIR})
 
-find_package(benchmark CONFIG REQUIRED)
+list(APPEND CMAKE_PREFIX_PATH "D:\\Program Files (x86)\\Intel\\oneAPI\\oidn\\2.0.0\\")
 
-enable_language(ASM_MASM)
+#find_package(OpenImageDenoise REQUIRED)
 
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/ray_tracer/lib/utility)
 
@@ -43,7 +49,7 @@ set_target_properties(ray_tracer PROPERTIES
     CXX_EXTENSIONS OFF
 )
 
-target_link_libraries(${PROJECT_NAME} utility_lib benchmark::benchmark benchmark::benchmark_main)
+target_link_libraries(${PROJECT_NAME} utility_lib) # OpenImageDenoise)
 target_include_directories(${PROJECT_NAME} PUBLIC 
 ${CMAKE_CURRENT_SOURCE_DIR}/
 ${CMAKE_CURRENT_SOURCE_DIR}/ray_tracer/lib/utility

@@ -2,8 +2,10 @@
 
 #include "engine.h"
 #include "util.h"
+#include "configuration.h"
 
 #include "ecs/components/transform_component.h"
+#include "ecs/components/hierarchy_component.h"
 #include "ecs/components/camera_component.h"
 #include "ecs/components/mesh_component.h"
 
@@ -15,6 +17,7 @@ void CRenderSystem::create(CRayEngine* engine)
 
 void CRenderSystem::update(CRayEngine* engine)
 {
+	auto& config = CConfiguration::getInstance()->get();
 	auto& renderer = engine->get_renderer();
 	auto& pixel_iter = renderer->get_pixel_iterator();
 
@@ -23,12 +26,34 @@ void CRenderSystem::update(CRayEngine* engine)
 
 	FCameraComponent* current_camera{ nullptr };
 	FTransformComponent* camera_transform{ nullptr };
-	auto view = registry.view<FTransformComponent, FCameraComponent>();
-	for (auto [entity, transform, camera] : view.each())
+
+	if (!config.m_scfg.m_camera_name.empty())
 	{
-		current_camera = &camera;
-		camera_transform = &transform;
-		break;
+		auto view = registry.view<FTransformComponent, FHierarchyComponent, FCameraComponent>();
+		for (auto [entity, transform, hierarchy, camera] : view.each())
+		{
+			if (config.m_scfg.m_camera_name == hierarchy.m_name)
+			{
+				current_camera = &camera;
+				camera_transform = &transform;
+				break;
+			}
+		}
+	}
+	else
+	{
+		size_t camera_idx{ 0ull };
+		auto view = registry.view<FTransformComponent, FCameraComponent>();
+		for (auto [entity, transform, camera] : view.each())
+		{
+			if (config.m_scfg.m_camera_id == camera_idx)
+			{
+				current_camera = &camera;
+				camera_transform = &transform;
+				break;
+			}
+			++camera_idx;
+		}
 	}
 
 	if (!current_camera || !camera_transform)

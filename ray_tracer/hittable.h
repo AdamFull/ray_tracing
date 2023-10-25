@@ -20,16 +20,16 @@ public:
 	glm::vec3 sample(const glm::vec3& p, const glm::vec2& sample, float& pdf) const;
 
 private:
-	FAxixAlignedBoundingBox m_aabb{};
-
 	FVertex m_v0, m_v1, m_v2;
 	glm::vec3 m_e0, m_e1;
 	glm::vec3 m_centroid{};
 	glm::mat3 m_normal{ 1.f };
 	float m_area{ 0.f };
 
+	FAxixAlignedBoundingBox m_aabb{};
 	resource_id_t m_material_id{ invalid_index };
 	size_t m_index{ invalid_index };
+
 	entt::entity m_root{ entt::null };
 	entt::registry* m_pRegistry{ nullptr };
 };

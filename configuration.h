@@ -45,6 +45,8 @@ struct FSkyboxConfig
 struct FSceneConfig
 {
 	std::string m_scene_path{};
+	std::string m_camera_name{};
+	size_t m_camera_id{ 1ull };
 	FSkyboxConfig m_skybox{};
 };
 

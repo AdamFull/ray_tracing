@@ -21,7 +21,8 @@ public:
 	const std::vector<uint32_t>& get_pixel_iterator() const;
 private:
 	void trace_ray(CScene* scene, FCameraComponent* camera, const glm::vec3& origin, uint32_t ray_index);
-	glm::vec3 integrate(CScene* scene, FRay ray, int32_t bounces, CCMGSampler& sampler);
+	glm::vec3 integrate_nee(CScene* scene, FRay ray, int32_t bounces, CCMGSampler& sampler, glm::vec3& surface_albedo, glm::vec3& surface_normal);
+	glm::vec3 integrate(CScene* scene, FRay ray, int32_t bounces, CCMGSampler& sampler, glm::vec3& surface_albedo, glm::vec3& surface_normal);
 private:
 	CResourceManager* m_pResourceManager{ nullptr };
 	std::unique_ptr<CFramebuffer> m_pFramebuffer{};

@@ -1,7 +1,7 @@
 #pragma once
 
 #include <tiny_gltf.h>
-#include "shared.h"
+#include "light_source.h"
 #include "ecs/components/fwdecl.h"
 #include "bvh_tree.h"
 
@@ -33,8 +33,12 @@ public:
 
 	bool trace_ray(const FRay& ray, float t_min, float t_max, FHitResult& hit_result);
 
+	size_t get_area_light_index(float index) const;
+	const CTriangle& get_area_light(size_t index) const;
+	float get_area_light_probability() const;
+
 	size_t get_light_index(float index) const;
-	const CTriangle& get_light(size_t index) const;
+	const std::unique_ptr<CLightSource>& get_light(size_t index) const;
 	float get_light_probability() const;
 
 	entt::registry& get_registry();
@@ -67,6 +71,8 @@ private:
 	std::vector<resource_id_t> m_vTextureIds{};
 	std::vector<resource_id_t> m_vMaterialIds{};
 	std::vector<size_t> m_vLightIds{};
+
+	std::vector<std::unique_ptr<CLightSource>> m_vLightSources{};
 
 	std::filesystem::path m_parentPath{};
 

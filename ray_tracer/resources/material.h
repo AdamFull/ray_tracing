@@ -87,6 +87,7 @@ public:
 	glm::vec3 emit(const FHitResult& hit_result) const;
 	bool can_emit_light() const;
 	bool can_scatter_light() const;
+	bool can_refract_light() const;
 
 	glm::vec3 sample(const glm::vec3& wo, const glm::vec2& sample, const glm::vec3& color, const glm::vec2& metallicRoughness, float& pdf) const;
 	glm::vec3 eval(const glm::vec3& wi, const glm::vec3& wo, const glm::vec3& color, const glm::vec2& metallicRoughness) const;

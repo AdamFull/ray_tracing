@@ -2,12 +2,18 @@
 #include "resources/resource_manager.h"
 
 #include "ecs/components/camera_component.h"
+#include "ecs/components/directional_light_component.h"
+#include "ecs/components/point_light_component.h"
+#include "ecs/components/spot_light_component.h"
+#include "ecs/components/transform_component.h"
 
 #include "util.h"
 
 #include "resources/bxdf.hpp"
 
 #include <configuration.h>
+
+constexpr const float ray_delta = 0.0001f;
 
 float balance_heuristic(float pdfF, float pdfG)
 {
@@ -21,8 +27,9 @@ glm::vec3 ray_color(const FRay& ray, const glm::vec3& cbegin, const glm::vec3& c
 	auto direction = glm::normalize(ray.m_direction);
 	auto t = 0.5f * (direction.y + 1.0f);
 	//return glm::mix(cbegin, cend, t);
+	return glm::vec3(1.f);
 	//return glm::vec3(glm::vec3(0.01f, 0.01f, 0.03f) * (1.f - t) + glm::vec3(0.0f, 0.0f, 0.0f) * t); // night
-	return glm::vec3(0.f);
+	//return glm::vec3(0.f);
 }
 
 CIntegrator::CIntegrator(CResourceManager* resource_manager)
@@ -36,7 +43,7 @@ void CIntegrator::create(uint32_t width, uint32_t heigth, uint32_t samples)
 
 	// Creating a framebuffer
 	m_pFramebuffer = std::make_unique<CFramebuffer>(m_pResourceManager);
-	m_pFramebuffer->create(width, heigth);
+	m_pFramebuffer->create(width, heigth, FRAMEBUFFER_ALL_ATTACHMENTS_FLAG_BIT);
 
 	m_sky_begin = config.m_scfg.m_skybox.m_gradient.m_begin;
 	m_sky_end = config.m_scfg.m_skybox.m_gradient.m_end;
@@ -71,29 +78,43 @@ void CIntegrator::trace_ray(CScene* scene, FCameraComponent* camera, const glm::
 
 	auto& ray_direction = camera->m_vRayDirections[ray_index];
 
-	static thread_local CCMGSampler sampler(m_sampleCount);
+	static thread_local CCMGSampler sampler(m_sampleCount * 2u);
 	sampler.begin(ray_index);
 
 	uint32_t actual_sample_count{ 0u };
 	float s1{ 0.f }, s2{ 0.f };
 
-	glm::vec4 final_color{ 0.f };
+	glm::vec3 final_color{ 0.f };
+	glm::vec3 final_albedo{ 0.f };
+	glm::vec3 final_normal{ 0.f };
 	while (true)
 	{
+		FRay fake{};
 		FRay ray{};
 		ray.m_origin = origin;
 		ray.set_direction(ray_direction);// +glm::vec3(sampler.sample(-0.001f, 0.001f), sampler.sample(-0.001f, 0.001f), sampler.sample(-0.001f, 0.001f)));
 
-		glm::vec4 sampled_color = glm::vec4(integrate(scene, ray, m_bounceCount, sampler), 1.f);
+		glm::vec3 sampled_albedo{ 0.f }, sampled_normal{ 0.f };
+		glm::vec3 direct_color = integrate(scene, ray, m_bounceCount, sampler, sampled_albedo, sampled_normal);
+		sampler.next();
+		//glm::vec3 indirect_color = indirect_illumination(scene, ray, m_bounceCount, sampler);
+		//sampler.next();
+
+		//glm::vec3 nee_color = integrate(scene, ray, m_bounceCount, sampler, sampled_albedo, sampled_normal);
+
+		//auto sampled_color = (direct_color + indirect_color + nee_color) / 2.f;
+		auto sampled_color = direct_color;
+
 		final_color += sampled_color;
+		final_albedo += sampled_albedo;
+		final_normal += sampled_normal;
 
 		++actual_sample_count;
-		sampler.next();
 
 		// based on https://cs184.eecs.berkeley.edu/sp21/docs/proj3-1-part-5
 		if (m_use_estimator)
 		{
-			float luma = glm::dot(glm::vec3(0.299f, 0.587f, 0.114f), glm::vec3(sampled_color));
+			float luma = glm::dot(glm::vec3(0.299f, 0.587f, 0.114f), sampled_color);
 			s1 += luma;
 			s2 += luma * luma;
 
@@ -117,10 +138,12 @@ void CIntegrator::trace_ray(CScene* scene, FCameraComponent* camera, const glm::
 		}
 	}
 
-	m_pFramebuffer->add_pixel(x, y, final_color / static_cast<float>(actual_sample_count));
+	m_pFramebuffer->add_pixel(x, y, final_color / static_cast<float>(actual_sample_count), FRAMEBUFFER_COLOR_ATTACHMENT_FLAG_BIT);
+	m_pFramebuffer->add_pixel(x, y, final_albedo / static_cast<float>(actual_sample_count), FRAMEBUFFER_ALBEDO_ATTACHMENT_FLAG_BIT);
+	m_pFramebuffer->add_pixel(x, y, final_normal / static_cast<float>(actual_sample_count), FRAMEBUFFER_NORMAL_ATTACHMENT_FLAG_BIT);
 }
 
-glm::vec3 CIntegrator::integrate(CScene* scene, FRay ray, int32_t bounces, CCMGSampler& sampler)
+glm::vec3 CIntegrator::integrate_nee(CScene* scene, FRay ray, int32_t bounces, CCMGSampler& sampler, glm::vec3& surface_albedo, glm::vec3& surface_normal)
 {
 	glm::vec3 throughput{ 1.f };
 	glm::vec3 out_color{ 0.f };
@@ -152,6 +175,12 @@ glm::vec3 CIntegrator::integrate(CScene* scene, FRay ray, int32_t bounces, CCMGS
 		glm::vec3 normal = material->sample_surface_normal(hit_result);
 		COrthonormalBasis basis(normal);
 
+		if (depth == 0)
+		{
+			surface_albedo = diffuse;
+			surface_normal = normal;
+		}
+
 		bool is_transparent = alpha < sampler.sample();
 
 		glm::vec3 wo = basis.to_local(glm::normalize(-ray.m_direction));
@@ -160,11 +189,11 @@ glm::vec3 CIntegrator::integrate(CScene* scene, FRay ray, int32_t bounces, CCMGS
 		const CTriangle* light{ nullptr };
 
 		// Calculate direct illumination if we have lights
-		float light_probability = scene->get_light_probability();
+		float light_probability = scene->get_area_light_probability();
 		if (!std::isinf(light_probability))
 		{
-			light_index = scene->get_light_index(sampler.sample());
-			light = &scene->get_light(light_index);
+			light_index = scene->get_area_light_index(sampler.sample());
+			light = &scene->get_area_light(light_index);
 		
 			float light_pdf{};
 			glm::vec3 light_dir = light->sample(hit_result.m_position, sampler.sample_vec2(), light_pdf);
@@ -174,14 +203,14 @@ glm::vec3 CIntegrator::integrate(CScene* scene, FRay ray, int32_t bounces, CCMGS
 			if (cos_theta_i > 0.f && light_pdf > 0.f)
 			{
 				FRay direct_ray;
-				direct_ray.m_origin = hit_result.m_position + glm::sign(cos_theta(wi)) * normal * 0.001f;
+				direct_ray.m_origin = hit_result.m_position + math::sign(cos_theta(wi)) * normal * 0.001f;
 				if (is_transparent)
 					direct_ray.set_direction(ray.m_direction);
 				else
 					direct_ray.set_direction(light_dir);
 		
 				FHitResult direct_hit{};
-				bool direct_hit_something = scene->trace_ray(direct_ray, 0.001f, std::numeric_limits<float>::infinity(), direct_hit);
+				bool direct_hit_something = scene->trace_ray(direct_ray, 0.f, std::numeric_limits<float>::infinity(), direct_hit);
 
 				// If we hit something transparent we should go to the next step
 				if(is_transparent)
@@ -217,11 +246,11 @@ glm::vec3 CIntegrator::integrate(CScene* scene, FRay ray, int32_t bounces, CCMGS
 		glm::vec3 bsdf = material->eval(wi, wo, diffuse, mr);
 
 		FRay indirect_ray{};
-		indirect_ray.m_origin = hit_result.m_position + glm::sign(cos_theta(wi)) * normal * 0.001f;
+		indirect_ray.m_origin = hit_result.m_position + math::sign(cos_theta(wi)) * normal * 0.001f;
 		indirect_ray.set_direction(basis.to_world(wi));
 
 		FHitResult indirect_hit{};
-		bool indirect_hit_something = scene->trace_ray(indirect_ray, 0.001f, std::numeric_limits<float>::infinity(), indirect_hit);
+		bool indirect_hit_something = scene->trace_ray(indirect_ray, 0.f, std::numeric_limits<float>::infinity(), indirect_hit);
 		if (indirect_hit_something && light_index == indirect_hit.m_primitive_id && indirect_hit.m_primitive_id != hit_result.m_primitive_id)
 		{
 			if (light)
@@ -251,6 +280,105 @@ glm::vec3 CIntegrator::integrate(CScene* scene, FRay ray, int32_t bounces, CCMGS
 		ray = indirect_ray;
 		hit_result = indirect_hit;
 		hit_something = indirect_hit_something;
+	}
+
+	return out_color;
+}
+
+glm::vec3 CIntegrator::integrate(CScene* scene, FRay ray, int32_t bounces, CCMGSampler& sampler, glm::vec3& surface_albedo, glm::vec3& surface_normal)
+{
+	glm::vec3 throughput{ 1.f };
+	glm::vec3 out_color{ 0.f };
+
+	FHitResult hit_result{};
+	auto hit_something = scene->trace_ray(ray, ray_delta, std::numeric_limits<float>::infinity(), hit_result);
+
+	for (uint32_t depth = 0u; depth <= bounces; ++depth)
+	{
+		if (!hit_something)
+		{
+			out_color += throughput * ray_color(ray, m_sky_begin, m_sky_end);
+			break;
+		}
+
+		auto& material = m_pResourceManager->get_material(hit_result.m_material_id);
+		if (material->can_emit_light() && depth == 0)
+		{
+			out_color += throughput * material->emit(hit_result);
+
+			if (!material->can_scatter_light())
+				break;
+		}
+
+		float alpha{ 1.f };
+		glm::vec3 diffuse = material->sample_diffuse_color(hit_result, alpha);
+		glm::vec2 mr = material->sample_surface_metallic_roughness(hit_result);
+		glm::vec3 normal = material->sample_surface_normal(hit_result);
+		COrthonormalBasis basis(normal);
+
+		if (depth == 0u)
+		{
+			surface_albedo += diffuse;
+			surface_normal += normal;
+		}
+
+		bool is_transparent = alpha < sampler.sample();
+
+		glm::vec3 wo = basis.to_local(glm::normalize(-ray.m_direction));
+
+		float light_probability = scene->get_light_probability();
+		if (!std::isinf(light_probability))
+		{
+			auto& light = scene->get_light(scene->get_light_index(sampler.sample()));
+
+			auto light_pdf = light->get_pdf();
+
+			auto light_direction = light->get_direction(hit_result);
+			glm::vec3 wi = basis.to_local(light_direction);
+
+			float cos_theta_i = glm::abs(cos_theta(wi));
+			if (cos_theta_i > 0.f && light_pdf > 0.f)
+			{
+				FRay shadow_ray(hit_result.m_position + math::sign(cos_theta(wi)) * normal * ray_delta, light_direction);
+				FHitResult shadow_hit;
+
+				auto distance = light->get_distance(hit_result);
+				if (!scene->trace_ray(shadow_ray, 0.f, distance, shadow_hit))
+				{
+					float bsdf_pdf = material->pdf(wi, wo, diffuse, mr);
+					if (bsdf_pdf > 0.f)
+					{
+						auto bsdf = material->eval(wi, wo, diffuse, mr);
+						float weight = balance_heuristic(light_pdf, bsdf_pdf);
+						auto light_color = light->get_color(hit_result);
+
+						out_color += throughput * light_color * bsdf * cos_theta_i * weight / (light_pdf * light_probability);
+					}
+				}
+			}
+		}
+
+		float bsdf_pdf{};
+		glm::vec3 wi = material->sample(wo, sampler.sample_vec2(), diffuse, mr, bsdf_pdf);
+		float cos_theta_i = glm::abs(cos_theta(wi));
+		if (cos_theta_i <= 0.f || bsdf_pdf <= 0.f)
+			break;
+
+		glm::vec3 bsdf = material->eval(wi, wo, diffuse, mr);
+		throughput *= bsdf * cos_theta_i / bsdf_pdf;
+
+		float rr_prob = glm::min(0.95f, math::max_component(throughput));
+		if (depth >= m_rrThreshold)
+		{
+			if (sampler.sample() > rr_prob)
+				break;
+
+			throughput /= rr_prob;
+		}
+
+		ray.m_origin = hit_result.m_position + math::sign(cos_theta(wi)) * normal * ray_delta;
+		ray.set_direction(basis.to_world(wi));
+		hit_something = scene->trace_ray(ray, 0.f, std::numeric_limits<float>::infinity(), hit_result);
 	}
 
 	return out_color;

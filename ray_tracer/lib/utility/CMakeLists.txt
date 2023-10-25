@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(utility_lib)
+project(utility_lib LANGUAGES CXX)
 
 file(GLOB UTILITY_MEMORY_SOURCES *.cpp *.hpp *.h)
 

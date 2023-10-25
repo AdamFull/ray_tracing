@@ -1,5 +1,15 @@
 #pragma once
 
+inline glm::vec4 unpack_rgba(uint32_t packed_color)
+{
+	float a = static_cast<float>((packed_color >> 24u) & 0xFFu) / 255.0f;
+	float b = static_cast<float>((packed_color >> 16u) & 0xFFu) / 255.0f;
+	float g = static_cast<float>((packed_color >> 8u) & 0xFFu) / 255.0f;
+	float r = static_cast<float>(packed_color & 0xFFu) / 255.0f;
+
+	return glm::vec4(r, g, b, a);
+}
+
 inline uint32_t pack_rgba(const glm::vec4& color)
 {
 	uint32_t r = static_cast<uint32_t>(glm::clamp(color.x, 0.f, 1.f) * 255.f) & 0xFFu;
@@ -22,8 +32,8 @@ public:
 	void load(const uint8_t* data, int32_t size);
 	void save(const std::filesystem::path& filepath);
 
-	void set_pixel(uint32_t x, uint32_t y, uint32_t color);
-	uint32_t get_pixel(uint32_t x, uint32_t y) const;
+	void set_pixel(uint32_t x, uint32_t y, const glm::vec4& color);
+	const glm::vec4& get_pixel(uint32_t x, uint32_t y) const;
 
 	void set_sampler(resource_id_t id);
 	resource_id_t get_sampler() const;
@@ -31,7 +41,9 @@ public:
 	const uint32_t get_width() const;
 	const uint32_t get_height() const;
 private:
+	glm::vec4 bilateral_filter(uint32_t x, uint32_t y, uint32_t radius, float sigmaI, float sigmaS);
+private:
 	uint32_t m_uWidth{ 0u }, m_uHeight{ 0u };
-	std::unique_ptr<uint32_t[]> m_pData{};
+	std::unique_ptr<glm::vec4[]> m_pData{};
 	resource_id_t m_sampler{ invalid_index };
 };

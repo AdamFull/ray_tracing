@@ -6,36 +6,40 @@
 
 constexpr uint32_t bins = 8u;
 
+CBVHTreeNew::~CBVHTreeNew()
+{
+}
+
 void CBVHTreeNew::create()
 {
     // Initialize node array
-    m_vNodes.resize(m_vTriangles.size() * 2ull + 64ull);
+    m_vNodes.resize(m_vHittables.size() * 2ull + 64ull);
 
     // Initialize triangle indices
-    m_vIndices.resize(m_vTriangles.size());
+    m_vIndices.resize(m_vHittables.size());
     std::iota(m_vIndices.begin(), m_vIndices.end(), 0u);
 
     // Initialize triangles
-    for (auto& triangle : m_vTriangles)
-        triangle.create();
+    for (auto& hittable : m_vHittables)
+        hittable.create();
 
     // Build tree
     build();
 }
 
-void CBVHTreeNew::emplace(CTriangle triangle)
+void CBVHTreeNew::emplace(const CTriangle& hittable)
 {
-    m_vTriangles.emplace_back(triangle);
+    m_vHittables.emplace_back(hittable);
 }
 
 size_t CBVHTreeNew::size() const
 {
-    return m_vTriangles.size();
+    return m_vHittables.size();
 }
 
 const CTriangle& CBVHTreeNew::get_triangle(size_t index) const
 {
-    return m_vTriangles.at(index);
+    return m_vHittables.at(index);
 }
 
 bool CBVHTreeNew::hit(const FRay& ray, float t_min, float t_max, FHitResult& hit_result) const
@@ -59,8 +63,8 @@ bool CBVHTreeNew::hit(const FRay& ray, float t_min, float t_max, FHitResult& hit
             for (uint32_t i = 0u; i < node->m_count; i++)
             {
                 uint32_t inst_prim = (node_idx << 20u) + m_vIndices[node->m_left + i];
-                auto& triangle = m_vTriangles[inst_prim & 0xfffff];
-                if (triangle.hit(ray, t_min, closest_hit, hit_result))
+                auto& hittable = m_vHittables[inst_prim & 0xfffff];
+                if (hittable.hit(ray, t_min, closest_hit, hit_result))
                 {
                     has_hit = true;
                     closest_hit = hit_result.m_distance;
@@ -110,7 +114,7 @@ void CBVHTreeNew::build()
 
     auto& root = m_vNodes[0ull];
     root.m_left = 0u;
-    root.m_count = m_vTriangles.size();
+    root.m_count = m_vHittables.size();
 
     FAxixAlignedBoundingBox centroid_aabb{};
     grow(0u, centroid_aabb);
@@ -127,13 +131,13 @@ void CBVHTreeNew::grow(uint32_t node_idx, FAxixAlignedBoundingBox& aabb)
 
     for (uint32_t first = node.m_left, i = 0u; i < node.m_count; ++i)
     {
-        uint32_t triangle_idx = m_vIndices[first + i];
-        auto& triangle = m_vTriangles[triangle_idx];
+        uint32_t hittable_idx = m_vIndices[first + i];
+        auto& hittable = m_vHittables[hittable_idx];
 
-        auto& triangle_bounds = triangle.bounds();
+        auto& triangle_bounds = hittable.bounds();
         node.m_aabb.grow(triangle_bounds);
 
-        auto& centroid = triangle.centroid();
+        auto& centroid = hittable.centroid();
         aabb.m_min = glm::min(aabb.m_min, centroid);
         aabb.m_max = glm::max(aabb.m_max, centroid);
     }
@@ -156,10 +160,10 @@ void CBVHTreeNew::subdivide(uint32_t node_idx, uint32_t depth, FAxixAlignedBound
     float scale = static_cast<float>(bins) / (centroid.m_max[axis] - centroid.m_min[axis]);
     while (i <= j)
     {
-        auto triangle_idx = m_vIndices[i];
-        auto& triangle = m_vTriangles[triangle_idx];
+        auto hittable_idx = m_vIndices[i];
+        auto& hittable = m_vHittables[hittable_idx];
 
-        uint32_t bin_idx = glm::min(bins - 1u, static_cast<uint32_t>((triangle.centroid()[axis] - centroid.m_min[axis]) * scale));
+        uint32_t bin_idx = glm::min(bins - 1u, static_cast<uint32_t>((hittable.centroid()[axis] - centroid.m_min[axis]) * scale));
         if (bin_idx < split_pos) 
             i++; 
         else 
@@ -213,11 +217,11 @@ float CBVHTreeNew::find_best_split(FBVHNode& node, uint32_t& axis, uint32_t& spl
 
         for (uint32_t i = 0u; i < node.m_count; i++)
         {
-            auto triangle_idx = m_vIndices[node.m_left + i];
-            auto& triangle = m_vTriangles[triangle_idx];
-            int binIdx = glm::min(bins - 1u, static_cast<uint32_t>((triangle.centroid()[a] - boundx_min) * scale));
+            auto hittable_idx = m_vIndices[node.m_left + i];
+            auto& hittable = m_vHittables[hittable_idx];
+            int binIdx = glm::min(bins - 1u, static_cast<uint32_t>((hittable.centroid()[a] - boundx_min) * scale));
             bin[binIdx].m_count++;
-            bin[binIdx].m_bounds.grow(triangle.bounds());
+            bin[binIdx].m_bounds.grow(hittable.bounds());
         }
 
         FAxixAlignedBoundingBox left, right;

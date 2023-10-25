@@ -1,8 +1,10 @@
 #include "camera_system.h"
 
 #include "engine.h"
+#include "configuration.h"
 
 #include "ecs/components/transform_component.h"
+#include "ecs/components/hierarchy_component.h"
 #include "ecs/components/camera_component.h"
 
 void CCameraSystem::create(CRayEngine* engine)
@@ -12,6 +14,7 @@ void CCameraSystem::create(CRayEngine* engine)
 
 void CCameraSystem::update(CRayEngine* engine)
 {
+	auto& config = CConfiguration::getInstance()->get();
 	auto& renderer = engine->get_renderer();
 	auto& framebuffer = renderer->get_framebuffer();
 	auto& extent = framebuffer->get_extent();
@@ -19,9 +22,27 @@ void CCameraSystem::update(CRayEngine* engine)
 	auto& scene = engine->get_scene();
 	auto& registry = scene->get_registry();
 
-	auto view = registry.view<FTransformComponent, FCameraComponent>();
-	for (auto [entity, transform, camera] : view.each())
-		update_camera(registry, extent, &camera, &transform);
+	if (!config.m_scfg.m_camera_name.empty())
+	{
+		auto view = registry.view<FTransformComponent, FHierarchyComponent, FCameraComponent>();
+		for (auto [entity, transform, hierarchy, camera] : view.each())
+		{
+			if(config.m_scfg.m_camera_name == hierarchy.m_name)
+				update_camera(registry, extent, &camera, &transform);
+		}
+	}
+	else
+	{
+		size_t camera_idx{ 0ull };
+		auto view = registry.view<FTransformComponent, FCameraComponent>();
+		for (auto [entity, transform, camera] : view.each())
+		{
+			if (config.m_scfg.m_camera_id == camera_idx)
+				update_camera(registry, extent, &camera, &transform);
+			++camera_idx;
+		}
+	}
+		
 }
 
 void CCameraSystem::update_camera(entt::registry& registry, const glm::uvec2& extent, FCameraComponent* camera, FTransformComponent* transform)

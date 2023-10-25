@@ -1,5 +1,3 @@
-#include <benchmark/benchmark.h>
-
 #include "ray_tracer/engine.h"
 #include "ray_tracer/math/math.hpp"
 #include "util.h"
@@ -9,6 +7,12 @@
 
 #include <logger/logger.h>
 #include <utime.hpp>
+
+bool is_number(const std::string& s)
+{
+	return !s.empty() && std::find_if(s.begin(),
+		s.end(), [](unsigned char c) { return !std::isdigit(c); }) == s.end();
+}
 
 int main(int argc, char** argv)
 {
@@ -25,6 +29,18 @@ int main(int argc, char** argv)
 	auto& config = CConfiguration::getInstance()->get();
 
 	config.m_scfg.m_scene_path = argparse.try_get("--in", config.m_scfg.m_scene_path);
+	
+	auto camera_name_id = argparse.try_get<std::string>("--camera", "2");
+	if (!is_number(camera_name_id))
+	{
+		if (camera_name_id.empty())
+			config.m_scfg.m_camera_id = 0ull;
+
+		config.m_scfg.m_camera_name = camera_name_id;
+	}
+	else
+		config.m_scfg.m_camera_id = std::stoull(camera_name_id);
+
 	config.m_ocfg.m_image_name = argparse.try_get("--out", config.m_ocfg.m_image_name);
 	config.m_fbcfg.m_width = argparse.try_get("--width", config.m_fbcfg.m_width);
 	config.m_fbcfg.m_height = argparse.try_get("--height", config.m_fbcfg.m_height);

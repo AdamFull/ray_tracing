@@ -1,6 +1,9 @@
 #include "hittable.h"
 #include "ecs/components/transform_component.h"
 
+#include <glm/gtx/quaternion.hpp>
+#include <glm/gtc/quaternion.hpp>
+
 glm::vec2 sample_uniform_triangle(const glm::vec2& sample)
 {
 	float a = glm::sqrt(sample.s);
@@ -110,7 +113,7 @@ float CTriangle::pdf(const glm::vec3& p, const glm::vec3& wi) const
 	ray.set_direction(wi);
 
 	FHitResult hit_result{};
-	bool hit_something = hit(ray, 0.001f, std::numeric_limits<float>::infinity(), hit_result);
+	bool hit_something = hit(ray, 0.f, std::numeric_limits<float>::infinity(), hit_result);
 
 	if (!hit_something)
 		return 0.f;
@@ -153,7 +156,7 @@ glm::vec3 CTriangle::sample(const glm::vec3& p, const glm::vec2& sample, float& 
 	if (cosThetaI <= 0.f)
 		pdf = 0.f;
 	else
-		pdf = glm::length2(q - p) / cosThetaI;
+		pdf = glm::length2(q - p) / (cosThetaI * m_area);
 
 	return dir;
 }

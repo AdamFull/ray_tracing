@@ -48,6 +48,11 @@ bool CMaterial::can_scatter_light() const
 	return m_albedo != glm::vec3(0.f) || m_textures.count(ETextureType::eAlbedo) || m_textures.count(ETextureType::eMetallRoughness);
 }
 
+bool CMaterial::can_refract_light() const
+{
+	return m_transmission > 0.f;
+}
+
 glm::vec3 CMaterial::sample(const glm::vec3& wo, const glm::vec2& sample, const glm::vec3& color, const glm::vec2& metallicRoughness, float& pdf) const
 {
 	float eta = cos_theta(wo) > 0.f ? 1.f / m_ior : m_ior;
@@ -66,15 +71,15 @@ glm::vec3 CMaterial::sample(const glm::vec3& wo, const glm::vec2& sample, const 
 	{
 		u = math::remap(u, 0.0f, diffuse_weight - std::numeric_limits<float>::epsilon(), 0.0f, one_minus_alpha);
 	
-		wi = glm::sign(cos_theta(wo)) * CCMGSampler::sample_cosine_hemisphere(glm::vec2(u, v));
+		wi = math::sign(cos_theta(wo)) * CCMGSampler::sample_cosine_hemisphere(glm::vec2(u, v));
 		assert(math::is_normalized(wi));
 	}
 	else if (u < diffuse_weight + specular_weight)
 	{
 		u = math::remap(u, diffuse_weight, diffuse_weight + specular_weight - std::numeric_limits<float>::epsilon(), 0.0f, one_minus_alpha);
 
-		glm::vec3 wo_upper = glm::sign(cos_theta(wo)) * wo;
-		glm::vec3 wh = glm::sign(cos_theta(wo)) * CCMGSampler::sample_ggx_vndf(wo_upper, glm::vec2(u, v), metallicRoughness.g);
+		glm::vec3 wo_upper = math::sign(cos_theta(wo)) * wo;
+		glm::vec3 wh = math::sign(cos_theta(wo)) * CCMGSampler::sample_ggx_vndf(wo_upper, glm::vec2(u, v), metallicRoughness.g);
 		if (glm::dot(wo, wh) < 0.0f)
 			return glm::vec3(0.0f);
 
@@ -86,8 +91,8 @@ glm::vec3 CMaterial::sample(const glm::vec3& wo, const glm::vec2& sample, const 
 	{
 		u = math::remap(u, diffuse_weight + specular_weight, one_minus_alpha, 0.0f, one_minus_alpha);
 	
-		glm::vec3 wo_upper = glm::sign(cos_theta(wo)) * wo;
-		glm::vec3 wh = glm::sign(cos_theta(wo)) * CCMGSampler::sample_ggx_vndf(wo_upper, glm::vec2(u, v), metallicRoughness.g);
+		glm::vec3 wo_upper = math::sign(cos_theta(wo)) * wo;
+		glm::vec3 wh = math::sign(cos_theta(wo)) * CCMGSampler::sample_ggx_vndf(wo_upper, glm::vec2(u, v), metallicRoughness.g);
 		if (glm::dot(wo, wh) < 0.0f)
 			return glm::vec3(0.0f);
 	
@@ -110,10 +115,13 @@ glm::vec3 CMaterial::eval(const glm::vec3& wi, const glm::vec3& wo, const glm::v
 {
 	float eta = cos_theta(wo) > 0.f ? 1.f / m_ior : m_ior;
 	glm::vec3 f0 = glm::mix(F0_Schlick(eta), color, metallicRoughness.r);
+	glm::vec3 F;
 
-	glm::vec3 diffuse = lambert_diffuse(wi, wo, color);
-	glm::vec3 specular = microfacet_reflection_ggx(wi, wo, f0, eta, metallicRoughness.g);
+	glm::vec3 diffuse = lambert_diffuse(wi, wo, glm::mix(color, glm::vec3(0.f), metallicRoughness.r));
+	glm::vec3 specular = microfacet_reflection_ggx(wi, wo, f0, eta, metallicRoughness.g, F);
 	glm::vec3 transmission = color * microfacet_transmission_ggx(wi, wo, f0, eta, metallicRoughness.g);
+
+	diffuse = (1.f - F) * diffuse;
 
 	float diffuse_weight = (1.f - metallicRoughness.r) * (1.f - m_transmission);
 	float transmission_weight = (1.f - metallicRoughness.r) * m_transmission;

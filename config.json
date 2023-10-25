@@ -1,7 +1,7 @@
 {
   "framebuffer": {
-    "width": 1280,
-    "height": 720,
+    "width": 800,
+    "height": 600,
     "aspect_mode": "camera",
     "antialiasing": false
   },
@@ -9,8 +9,8 @@
     "image_name": "final.png"
   },
   "integrator": {
-    "sample_count": 50,
-    "bounce_count": 10,
+    "sample_count": 100,
+    "bounce_count": 25,
     "rr_threshold": 3,
 
     "use_estimator": false,
@@ -21,7 +21,7 @@
     "exposure": 2.0
   },
   "scene": {
-    "path": "D:\\GitHub\\ray_tracing\\meshes\\DamagedHelmet\\glTF\\DamagedHelmet.gltf",
+    "path": "D:\\GitHub\\ray_tracing\\meshes\\round1\\low-res.glb",
     "skybox": {
       "gradient": {
         "begin": [ 1.0, 1.0, 1.0 ],

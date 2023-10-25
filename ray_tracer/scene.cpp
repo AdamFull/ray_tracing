@@ -114,19 +114,34 @@ bool CScene::trace_ray(const FRay& ray, float t_min, float t_max, FHitResult& hi
 	return m_pBVHTree->hit(ray, t_min, t_max, hit_result);
 }
 
-size_t CScene::get_light_index(float index) const
+size_t CScene::get_area_light_index(float index) const
 {
 	return m_vLightIds.at(static_cast<size_t>(index * m_vLightIds.size()));
 }
 
-const CTriangle& CScene::get_light(size_t index) const
+const CTriangle& CScene::get_area_light(size_t index) const
 {
 	return m_pBVHTree->get_triangle(index);
 }
 
-float CScene::get_light_probability() const
+float CScene::get_area_light_probability() const
 {
 	return 1.f / static_cast<float>(m_vLightIds.size());
+}
+
+size_t CScene::get_light_index(float index) const
+{
+	return static_cast<size_t>(index * m_vLightSources.size());
+}
+
+const std::unique_ptr<CLightSource>& CScene::get_light(size_t index) const
+{
+	return m_vLightSources.at(index);
+}
+
+float CScene::get_light_probability() const
+{
+	return 1.f / static_cast<float>(m_vLightSources.size());
 }
 
 entt::registry& CScene::get_registry()
@@ -198,7 +213,9 @@ void CScene::load_samplers(const tinygltf::Model& model)
 			static_cast<EWrapMode>(sampler.wrapS),
 			static_cast<EWrapMode>(sampler.wrapT));
 
-		m_vSamplerIds.emplace_back(m_pResourceManager->add_sampler(sampler.name, std::move(new_sampler)));
+		auto sampler_name = sampler.name + std::to_string(m_vSamplerIds.size());
+
+		m_vSamplerIds.emplace_back(m_pResourceManager->add_sampler(sampler_name, std::move(new_sampler)));
 	}
 }
 
@@ -268,18 +285,21 @@ void CScene::load_materials(const tinygltf::Model& model)
 	uint32_t matIndex{ 0 };
 	for (auto& mat : model.materials)
 	{
+		std::string material_name{ mat.name };
 		FMaterialCreateInfo material_ci{};
 
 		if (mat.values.find("baseColorTexture") != mat.values.end())
 		{
 			auto texture = mat.values.at("baseColorTexture");
 			material_ci.m_textures.emplace(ETextureType::eAlbedo, m_vTextureIds.at(texture.TextureIndex()));
+			material_name += std::to_string(texture.TextureIndex());
 		}
 
 		if (mat.values.find("metallicRoughnessTexture") != mat.values.end())
 		{
 			auto texture = mat.values.at("metallicRoughnessTexture");
 			material_ci.m_textures.emplace(ETextureType::eMetallRoughness, m_vTextureIds.at(texture.TextureIndex()));
+			material_name += std::to_string(texture.TextureIndex());
 		}
 
 		if (mat.additionalValues.find("normalTexture") != mat.additionalValues.end())
@@ -287,6 +307,7 @@ void CScene::load_materials(const tinygltf::Model& model)
 			auto texture = mat.additionalValues.at("normalTexture");
 			material_ci.m_fNormalMapScale = static_cast<float>(texture.TextureScale());
 			material_ci.m_textures.emplace(ETextureType::eNormal, m_vTextureIds.at(texture.TextureIndex()));
+			material_name += std::to_string(texture.TextureIndex());
 		}
 
 		if (mat.additionalValues.find("occlusionTexture") != mat.additionalValues.end())
@@ -294,12 +315,14 @@ void CScene::load_materials(const tinygltf::Model& model)
 			auto texture = mat.additionalValues.at("occlusionTexture");
 			material_ci.m_fOcclusionStrength = static_cast<float>(texture.TextureStrength());
 			material_ci.m_textures.emplace(ETextureType::eAmbientOcclusion, m_vTextureIds.at(texture.TextureIndex()));
+			material_name += std::to_string(texture.TextureIndex());
 		}
 
 		if (mat.additionalValues.find("emissiveTexture") != mat.additionalValues.end())
 		{
 			auto texture = mat.additionalValues.at("emissiveTexture");
 			material_ci.m_textures.emplace(ETextureType::eEmission, m_vTextureIds.at(texture.TextureIndex()));
+			material_name += std::to_string(texture.TextureIndex());
 		}
 
 		if (mat.additionalValues.find("emissiveFactor") != mat.additionalValues.end())
@@ -353,7 +376,7 @@ void CScene::load_materials(const tinygltf::Model& model)
 
 		new_material->create(material_ci);
 
-		m_vMaterialIds.emplace_back(m_pResourceManager->add_material(mat.name, std::move(new_material)));
+		m_vMaterialIds.emplace_back(m_pResourceManager->add_material(material_name, std::move(new_material)));
 	}
 
 	log_verbose("Loaded {} materials.", m_vMaterialIds.size());
@@ -620,7 +643,7 @@ void CScene::load_mesh_component(const entt::entity& target, const tinygltf::Nod
 		}
 
 		auto& material = m_pResourceManager->get_material(material_id);
-		bool is_light_emitter = material->can_emit_light() && !material->can_scatter_light();
+		bool is_light_emitter = material->can_emit_light();// && !material->can_scatter_light();
 
 		for (uint32_t index = 0u; index < indexBuffer.size(); index += 3u)
 		{
@@ -680,12 +703,19 @@ void CScene::load_light_component(const entt::entity& target, uint32_t light_ind
 	else
 		color = glm::make_vec3(light.color.data());
 
+	// Simple lights
+	// sample one area light and one simple light
+	// If we hit something while we trace ray to light, ignore it
+
+	auto& light_source = m_vLightSources.emplace_back();
 	if (light.type == "directional")
 	{
 		FDirectionalLightComponent lightComponent;
 		lightComponent.m_color = color;
 		lightComponent.m_intencity = light.intensity;
+		lightComponent.m_intencity = 10.f;
 		m_registry.emplace<FDirectionalLightComponent>(target, lightComponent);
+		light_source = std::make_unique<CDirectionalLightSource>();
 	}
 	else if (light.type == "spot")
 	{
@@ -695,6 +725,7 @@ void CScene::load_light_component(const entt::entity& target, uint32_t light_ind
 		lightComponent.m_outerAngle = light.spot.outerConeAngle;
 		lightComponent.m_intencity = light.intensity;
 		m_registry.emplace<FSpotLightComponent>(target, lightComponent);
+		light_source = std::make_unique<CSpotLightSource>();
 	}
 	else if (light.type == "point")
 	{
@@ -703,7 +734,10 @@ void CScene::load_light_component(const entt::entity& target, uint32_t light_ind
 		lightComponent.m_intencity = light.intensity;
 		lightComponent.m_radius = light.range;
 		m_registry.emplace<FPointLightComponent>(target, lightComponent);
+		light_source = std::make_unique<CPointLightSource>();
 	}
+
+	light_source->create(target, m_registry);
 
 	log_verbose("Loaded {} light with id {}.", light.type, static_cast<uint32_t>(target));
 }

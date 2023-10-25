@@ -32,10 +32,10 @@ class CBVHTreeNew
 		FAxixAlignedBoundingBox m_centroid{};
 	};
 public:
-	~CBVHTreeNew() = default;
+	~CBVHTreeNew();
 
 	void create();
-	void emplace(CTriangle triangle);
+	void emplace(const CTriangle& triangle);
 	size_t size() const;
 	const CTriangle& get_triangle(size_t index) const;
 
@@ -48,7 +48,7 @@ private:
 	float find_best_split(FBVHNode& node, uint32_t& axis, uint32_t& split_pos, FAxixAlignedBoundingBox& centroid);
 protected:
 	std::vector<FBVHNode> m_vNodes{};
-	std::vector<CTriangle> m_vTriangles{};
+	std::vector<CTriangle> m_vHittables{};
 	std::vector<uint32_t> m_vIndices{};
 
 	uint32_t m_size{ 0u };

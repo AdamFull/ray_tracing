@@ -68,3 +68,24 @@ inline glm::vec3 Uncharted2Tonemap(const glm::vec3& color)
 	float W = 11.2f;
 	return ((color * (A * color + C * B) + D * E) / (color * (A * color + B) + D * F)) - E / F;
 }
+
+inline glm::vec3 ACESTonemap(const glm::vec3& color)
+{
+	constexpr const glm::vec3 A0(0.59719f, 0.35458f, 0.04823f);
+	constexpr const glm::vec3 B0(0.07600f, 0.90834f, 0.01566f);
+	constexpr const glm::vec3 C0(0.02840f, 0.13383f, 0.83777f);
+
+	auto result = glm::vec3(glm::dot(A0, color), glm::dot(B0, color), glm::dot(C0, color));
+
+	const glm::vec3 a = result * (result + 0.0245786f) - 0.000090537f;
+	const glm::vec3 b = result * (0.983729f * result + 0.4329510f) + 0.238081f;
+	result = a / b;
+
+	constexpr const glm::vec3 A1(1.60475f, -0.53108f, -0.07367f);
+	constexpr const glm::vec3 B1(-0.10208f, 1.10813f, -0.00605f);
+	constexpr const glm::vec3 C1(-0.00327f, -0.07276f, 1.07602f);
+
+	result = glm::vec3(glm::dot(A1, result), glm::dot(B1, result), glm::dot(C1, result));
+
+	return glm::clamp(result, 0.f, 1.f);
+}

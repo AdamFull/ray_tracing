@@ -57,12 +57,13 @@ inline float G1_Smith_GGX(const glm::vec3& w, float alpha) noexcept
 inline float G2_Smith_Height_Correlated_GGX(const glm::vec3& wi, const glm::vec3& wo, float alpha) 
 {
 	float tan2ThetaO = tan_theta_sq(wo);
-	if (std::isinf(tan2ThetaO)) 
+	if (std::isinf(tan2ThetaO) || std::isnan(tan2ThetaO))
 		return 0.0f;
 
 	float tan2ThetaI = tan_theta_sq(wi);
-	
-	if (std::isinf(tan2ThetaI)) return 0.0f;
+	if (std::isinf(tan2ThetaI) || std::isnan(tan2ThetaI)) 
+		return 0.0f;
+
 	float alpha2 = alpha * alpha;
 	assert(alpha2 * tan2ThetaO >= -1.0f);
 	assert(alpha2 * tan2ThetaI >= -1.0f);
@@ -79,7 +80,10 @@ inline glm::vec3 F0_Schlick(float eta) noexcept
 
 inline glm::vec3 F_Schlick(float cosThetaI, const glm::vec3& f0) noexcept
 {
-	return f0 + (glm::vec3(1.f) - f0) * glm::pow(glm::max(0.f, 1.f - cosThetaI), 5.f);
+	float a = glm::max(0.0f, 1.0f - cosThetaI);
+	float a2 = a * a;
+	float a5 = a2 * a2 * a;
+	return f0 + (1.0f - f0) * a5;
 }
 
 inline glm::vec3 lambert_diffuse(const glm::vec3& wi, const glm::vec3& wo, const glm::vec3& diffuse_color)
@@ -90,7 +94,7 @@ inline glm::vec3 lambert_diffuse(const glm::vec3& wi, const glm::vec3& wo, const
 	return diffuse_color / std::numbers::pi_v<float>;
 }
 
-inline glm::vec3 microfacet_reflection_ggx(const glm::vec3& wi, const glm::vec3& wo, const glm::vec3& f0, float eta, float alpha)
+inline glm::vec3 microfacet_reflection_ggx(const glm::vec3& wi, const glm::vec3& wo, const glm::vec3& f0, float eta, float alpha, glm::vec3& F)
 {
 	if (!on_same_hemisphere(wi, wo) || cos_theta(wi) == 0.0f || cos_theta(wo) == 0.0f)
 		return glm::vec3(0.0f);
@@ -101,7 +105,6 @@ inline glm::vec3 microfacet_reflection_ggx(const glm::vec3& wi, const glm::vec3&
 
 	wh = glm::normalize(wh);
 
-	glm::vec3 F;
 	if (eta < 1.0f) 
 	{
 		float cosThetaT = glm::dot(wi, wh);
@@ -121,17 +124,18 @@ inline glm::vec3 microfacet_transmission_ggx(const glm::vec3& wi, const glm::vec
 	if (on_same_hemisphere(wi, wo) || cos_theta(wi) == 0.0f || cos_theta(wo) == 0.0f)
 		return glm::vec3(0.0f);
 
-	glm::vec3 wh = glm::normalize(wi + eta * wo);
+	glm::vec3 wh = glm::normalize(wi + wo * eta);
 	if (cos_theta(wh) < 0.0f)
 		wh = -wh;
-
-	if (glm::dot(wo, wh) * glm::dot(wi, wh) > 0.0f)
+	
+	float cosThetaI = glm::dot(wo, wh);
+	float cosThetaT = glm::dot(wi, wh);
+	if (cosThetaI * cosThetaT > 0.0f)
 		return glm::vec3(0.0f);
 
 	glm::vec3 F;
 	if (eta < 1.0f) 
 	{
-		float cosThetaT = glm::dot(wi, wh);
 		float cos2ThetaT = cosThetaT * cosThetaT;
 		F = cos2ThetaT > 0.0f ? F_Schlick(glm::abs(cosThetaT), f0) : glm::vec3(1.0f);
 	}
@@ -140,9 +144,8 @@ inline glm::vec3 microfacet_transmission_ggx(const glm::vec3& wi, const glm::vec
 
 	float G = G2_Smith_Height_Correlated_GGX(wi, wo, alpha);
 	float D = D_GGX(wh, alpha);
-	float denomSqrt = dot(wi, wh) + eta * glm::dot(wo, wh);
-	return (glm::vec3(1.0f) - F) * D * G * glm::abs(glm::dot(wi, wh)) * glm::abs(glm::dot(wo, wh))
-		/ (denomSqrt * denomSqrt * glm::abs(cos_theta(wi)) * glm::abs(cos_theta(wo)));
+	float denomSqrt = cosThetaT + eta * cosThetaI;
+	return (1.f - F) * D * G * glm::abs(cosThetaT) * glm::abs(cosThetaI) / (denomSqrt * denomSqrt * glm::abs(cos_theta(wi)) * glm::abs(cos_theta(wo)));
 }
 
 inline float cosine_weighted_pdf(const glm::vec3& wi, const glm::vec3& wo) noexcept
@@ -157,7 +160,7 @@ inline float ggx_vndf_reflection_pdf(const glm::vec3& wi, const glm::vec3& wo, f
 
 	glm::vec3 wh = glm::normalize(wi + wo);
 	float pdf_h = G1_Smith_GGX(wo, alpha) * D_GGX(wh, alpha) * glm::abs(glm::dot(wh, wo)) / glm::abs(cos_theta(wo));
-	float dwh_dwi = 1.0f / (4.0f * dot(wi, wh));
+	float dwh_dwi = 1.0f / (4.0f * glm::dot(wi, wh));
 	return pdf_h * dwh_dwi;
 }
 
@@ -167,11 +170,14 @@ inline float ggx_vndf_transmission_pdf(const glm::vec3& wi, const glm::vec3& wo,
 		return 0.f;
 
 	glm::vec3 wh = glm::normalize(wi + eta * wo);
-	if (glm::dot(wo, wh) * glm::dot(wi, wh) > 0.0f) 
+
+	float cosThetaI = glm::dot(wo, wh);
+	float cosThetaT = glm::dot(wi, wh);
+	if (cosThetaI * cosThetaT > 0.0f)
 		return 0.0f;
 
-	float pdf_h = G1_Smith_GGX(wo, alpha) * D_GGX(wh, alpha) * glm::abs(glm::dot(wh, wo)) / glm::abs(cos_theta(wo));
-	float sqrtDenom = glm::dot(wi, wh) + eta * glm::dot(wo, wh);
-	float dwh_dwi = glm::abs(glm::dot(wi, wh)) / (sqrtDenom * sqrtDenom);
+	float pdf_h = G1_Smith_GGX(wo, alpha) * D_GGX(wh, alpha) * glm::abs(cosThetaI) / glm::abs(cos_theta(wo));
+	float sqrtDenom = cosThetaT + eta * cosThetaI;
+	float dwh_dwi = glm::abs(cosThetaT) / (sqrtDenom * sqrtDenom);
 	return pdf_h * dwh_dwi;
 }

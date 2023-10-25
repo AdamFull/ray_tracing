@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.19.1)
-project(utllogger)
+project(utllogger LANGUAGES CXX)
 
 file(GLOB LOGGER_SOURCES *.cpp *.c *.cc *.h *.hpp)
 file(GLOB LOGGER_OUTPUT_SOURCES output/*.cpp output/*.c output/*.cc output/*.h output/*.hpp)
