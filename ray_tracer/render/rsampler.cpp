@@ -129,25 +129,41 @@ glm::vec3 CCMGSampler::sample_ggx_vndf(const glm::vec3& wo, const glm::vec2& sam
 {
 	// Transform view direction to hemisphere configuration
 	glm::vec3 woHemi = glm::normalize(glm::vec3(alpha * wo.x, alpha * wo.y, wo.z));
-
+	
 	// Create orthonormal basis
 	float length2 = woHemi.x * woHemi.x + woHemi.y * woHemi.y;
 	glm::vec3 b1 = length2 > 0.0f
-		? glm::vec3(-woHemi.y, woHemi.x, 0.0f) * (1.0f / glm::sqrt(length2))
+		? glm::vec3(-woHemi.y, woHemi.x, 0.0f) * (1.0f / std::sqrt(length2))
 		: glm::vec3(1.0f, 0.0f, 0.0f);
 	glm::vec3 b2 = glm::cross(woHemi, b1);
-
+	
 	// Parameterization of projected area
-	float r = glm::sqrt(sample.s);
-	float phi = 2.0f * std::numbers::pi_v<float> * sample.t;
-	float t1 = r * glm::cos(phi);
-	float t2 = r * glm::sin(phi);
+	float r = std::sqrt(sample.x);
+	float phi = 2.0f * glm::pi<float>() * sample.y;
+	float t1 = r * std::cos(phi);
+	float t2 = r * std::sin(phi);
 	float s = 0.5f * (1.0f + woHemi.z);
-	t2 = (1.0f - s) * glm::sqrt(1.0f - t1 * t1) + s * t2;
-
+	t2 = (1.0f - s) * std::sqrt(1.0f - t1 * t1) + s * t2;
+	
 	// Reprojection onto hemisphere
-	glm::vec3 whHemi = t1 * b1 + t2 * b2 + glm::sqrt(glm::max(0.0f, 1.0f - t1 * t1 - t2 * t2)) * woHemi;
-
+	glm::vec3 whHemi = t1 * b1 + t2 * b2 + std::sqrt(glm::max(0.0f, 1.0f - t1 * t1 - t2 * t2)) * woHemi;
+	
 	// Transforming half vector back to ellipsoid configuration
 	return glm::normalize(glm::vec3(alpha * whHemi.x, alpha * whHemi.y, glm::max(0.0f, whHemi.z)));
+}
+
+glm::vec3 CCMGSampler::sample_ggx(const glm::vec3& wo, const glm::vec2& sample, float alpha) noexcept
+{
+	float phi = 2.f * glm::pi<float>() * sample.x;
+	float cosTheta = std::sqrt((1.f - sample.y) / (1.f + (alpha * alpha - 1.f) * sample.y));
+	float sinTheta = std::sqrt(1.f - cosTheta * cosTheta);
+
+
+	glm::vec3 H{ sinTheta * glm::cos(phi), sinTheta * glm::sin(phi), cosTheta };
+
+	glm::vec3 up = glm::abs(wo.z) < 0.999f ? glm::vec3(0.f, 0.f, 1.f) : glm::vec3(1.f, 0.f, 0.f);
+	glm::vec3 tangent = glm::normalize(glm::cross(up, wo));
+	glm::vec3 bitangent = glm::cross(wo, tangent);
+
+	return glm::normalize(tangent * H.x + bitangent * H.y + wo * H.z);
 }

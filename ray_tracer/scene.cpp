@@ -451,7 +451,7 @@ void CScene::load_mesh_component(const entt::entity& target, const tinygltf::Nod
 		uint32_t indexCount = 0;
 		uint32_t vertexCount = 0;
 
-		bool bHasNormals{ false }, bHasTangents{ false };
+		bool bHasNormals{ false }, bHasTangents{ false }, bHasUV{ false };
 
 		// Vertices
 		{
@@ -485,6 +485,7 @@ void CScene::load_mesh_component(const entt::entity& target, const tinygltf::Nod
 				const tinygltf::Accessor& uvAccessor = model.accessors[primitive.attributes.find("TEXCOORD_0")->second];
 				const tinygltf::BufferView& uvView = model.bufferViews[uvAccessor.bufferView];
 				bufferTexCoords = reinterpret_cast<const float*>(&(model.buffers[uvView.buffer].data[uvAccessor.byteOffset + uvView.byteOffset]));
+				bHasUV = true;
 			}
 
 			// Load mesh color data
@@ -588,6 +589,11 @@ void CScene::load_mesh_component(const entt::entity& target, const tinygltf::Nod
 		// Attaching materials
 		if (!m_vMaterialIds.empty())
 			material_id = primitive.material != invalid_index ? m_vMaterialIds.at(primitive.material) : m_vMaterialIds.back();
+
+		if (!bHasUV)
+		{
+
+		}
 
 		// Calculate tangent
 		if (!bHasTangents)
@@ -713,7 +719,7 @@ void CScene::load_light_component(const entt::entity& target, uint32_t light_ind
 		FDirectionalLightComponent lightComponent;
 		lightComponent.m_color = color;
 		lightComponent.m_intencity = light.intensity;
-		lightComponent.m_intencity = 10.f;
+		lightComponent.m_intencity = 50.f;
 		m_registry.emplace<FDirectionalLightComponent>(target, lightComponent);
 		light_source = std::make_unique<CDirectionalLightSource>();
 	}

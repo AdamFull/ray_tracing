@@ -2,6 +2,7 @@
 
 #include "ecs/systems/systems.h"
 #include "ecs/components/camera_component.h"
+#include "ecs/components/transform_component.h"
 
 #include <configuration.h>
 
@@ -22,6 +23,15 @@ void CRayEngine::create()
 	{
 		current_camera = &camera;
 		break;
+	}
+
+	if (!current_camera)
+	{
+		auto new_camera = registry.create();
+		registry.emplace<FTransformComponent>(new_camera, FTransformComponent{});
+		registry.emplace<FCameraComponent>(new_camera, FCameraComponent{});
+
+		current_camera = registry.try_get<FCameraComponent>(new_camera);
 	}
 
 	uint32_t height = config.m_fbcfg.m_height;

@@ -30,7 +30,7 @@ int main(int argc, char** argv)
 
 	config.m_scfg.m_scene_path = argparse.try_get("--in", config.m_scfg.m_scene_path);
 	
-	auto camera_name_id = argparse.try_get<std::string>("--camera", "2");
+	auto camera_name_id = argparse.try_get<std::string>("--camera", "0");
 	if (!is_number(camera_name_id))
 	{
 		if (camera_name_id.empty())

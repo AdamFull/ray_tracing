@@ -193,8 +193,8 @@ namespace math
 		auto pvec = glm::cross(rd, e1);
 		auto det = glm::dot(e0, pvec);
 
-		if (det < std::numeric_limits<float>::epsilon())
-			return false;
+		//if (det < std::numeric_limits<float>::epsilon())
+		//	return false;
 
 		auto inv_det = 1.f / det;
 

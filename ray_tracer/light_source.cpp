@@ -28,7 +28,7 @@ float CDirectionalLightSource::get_distance(const FHitResult& hit_result) const
 	return std::numeric_limits<float>::infinity();
 }
 
-float CDirectionalLightSource::get_pdf() const
+float CDirectionalLightSource::get_pdf(const FHitResult& hit_result) const
 {
 	return 1.f;
 }
@@ -55,7 +55,7 @@ float CPointLightSource::get_distance(const FHitResult& hit_result) const
 	return glm::distance(hit_result.m_position, m_transform->m_position_g);
 }
 
-float CPointLightSource::get_pdf() const
+float CPointLightSource::get_pdf(const FHitResult& hit_result) const
 {
 	return 1.f;
 }
@@ -85,8 +85,11 @@ float CSpotLightSource::get_distance(const FHitResult& hit_result) const
 	return std::numeric_limits<float>::infinity();
 }
 
-float CSpotLightSource::get_pdf() const
+float CSpotLightSource::get_pdf(const FHitResult& hit_result) const
 {
+	auto light_direction = get_direction(hit_result);
+	//auto cos_theta_i = std::cos(light_direction);
+
 	return 1.f;
 }
 

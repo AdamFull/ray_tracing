@@ -10,7 +10,7 @@
   },
   "integrator": {
     "sample_count": 100,
-    "bounce_count": 25,
+    "bounce_count": 10,
     "rr_threshold": 3,
 
     "use_estimator": false,
@@ -21,7 +21,7 @@
     "exposure": 2.0
   },
   "scene": {
-    "path": "D:\\GitHub\\ray_tracing\\meshes\\round1\\low-res.glb",
+    "path": "D:\\GitHub\\ray_tracing\\meshes\\Tests\\AlphaBlendModeTest\\AlphaBlendModeTest.gltf",
     "skybox": {
       "gradient": {
         "begin": [ 1.0, 1.0, 1.0 ],

@@ -12,7 +12,7 @@ public:
 
 	virtual glm::vec3 get_direction(const FHitResult& hit_result) const = 0;
 	virtual float get_distance(const FHitResult& hit_result) const = 0;
-	virtual float get_pdf() const = 0;
+	virtual float get_pdf(const FHitResult& hit_result) const = 0;
 
 	virtual glm::vec3 get_color(const FHitResult& hit_result) const = 0;
 protected:
@@ -30,7 +30,7 @@ public:
 
 	glm::vec3 get_direction(const FHitResult& hit_result) const override;
 	float get_distance(const FHitResult& hit_result) const override;
-	float get_pdf() const override;
+	float get_pdf(const FHitResult& hit_result) const override;
 
 	glm::vec3 get_color(const FHitResult& hit_result) const override;
 private:
@@ -46,7 +46,7 @@ public:
 
 	glm::vec3 get_direction(const FHitResult& hit_result) const override;
 	float get_distance(const FHitResult& hit_result) const override;
-	float get_pdf() const override;
+	float get_pdf(const FHitResult& hit_result) const override;
 
 	glm::vec3 get_color(const FHitResult& hit_result) const override;
 private:
@@ -62,7 +62,7 @@ public:
 
 	glm::vec3 get_direction(const FHitResult& hit_result) const override;
 	float get_distance(const FHitResult& hit_result) const override;
-	float get_pdf() const override;
+	float get_pdf(const FHitResult& hit_result) const override;
 
 	glm::vec3 get_color(const FHitResult& hit_result) const override;
 private:

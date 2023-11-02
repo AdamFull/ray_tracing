@@ -13,7 +13,7 @@
 
 #include <configuration.h>
 
-constexpr const float ray_delta = 0.0001f;
+constexpr const float ray_delta = 0.001f;
 
 float balance_heuristic(float pdfF, float pdfG)
 {
@@ -78,7 +78,7 @@ void CIntegrator::trace_ray(CScene* scene, FCameraComponent* camera, const glm::
 
 	auto& ray_direction = camera->m_vRayDirections[ray_index];
 
-	static thread_local CCMGSampler sampler(m_sampleCount * 2u);
+	static thread_local CCMGSampler sampler(m_sampleCount);
 	sampler.begin(ray_index);
 
 	uint32_t actual_sample_count{ 0u };
@@ -89,32 +89,30 @@ void CIntegrator::trace_ray(CScene* scene, FCameraComponent* camera, const glm::
 	glm::vec3 final_normal{ 0.f };
 	while (true)
 	{
-		FRay fake{};
 		FRay ray{};
 		ray.m_origin = origin;
-		ray.set_direction(ray_direction);// +glm::vec3(sampler.sample(-0.001f, 0.001f), sampler.sample(-0.001f, 0.001f), sampler.sample(-0.001f, 0.001f)));
+		const float aa_radius{ 0.0005f };
+		ray.set_direction(ray_direction+glm::vec3(sampler.sample(-aa_radius, aa_radius), sampler.sample(-aa_radius, aa_radius), sampler.sample(-aa_radius, aa_radius)));
 
 		glm::vec3 sampled_albedo{ 0.f }, sampled_normal{ 0.f };
-		glm::vec3 direct_color = integrate(scene, ray, m_bounceCount, sampler, sampled_albedo, sampled_normal);
+		glm::vec3 sampled_color = integrate(scene, ray, m_bounceCount, sampler, sampled_albedo, sampled_normal);
 		sampler.next();
-		//glm::vec3 indirect_color = indirect_illumination(scene, ray, m_bounceCount, sampler);
+		//glm::vec3 sampled_color_nee = integrate_nee(scene, ray, m_bounceCount, sampler, sampled_albedo, sampled_normal);
 		//sampler.next();
 
-		//glm::vec3 nee_color = integrate(scene, ray, m_bounceCount, sampler, sampled_albedo, sampled_normal);
+		//auto result_color = (sampled_color + sampled_color_nee) / 2.f;
+		auto result_color = sampled_color;
 
-		//auto sampled_color = (direct_color + indirect_color + nee_color) / 2.f;
-		auto sampled_color = direct_color;
-
-		final_color += sampled_color;
-		final_albedo += sampled_albedo;
-		final_normal += sampled_normal;
+		final_color += result_color;
+		final_albedo += sampled_albedo / 2.f;
+		final_normal += sampled_normal / 2.f;
 
 		++actual_sample_count;
 
 		// based on https://cs184.eecs.berkeley.edu/sp21/docs/proj3-1-part-5
 		if (m_use_estimator)
 		{
-			float luma = glm::dot(glm::vec3(0.299f, 0.587f, 0.114f), sampled_color);
+			float luma = glm::dot(glm::vec3(0.299f, 0.587f, 0.114f), result_color);
 			s1 += luma;
 			s2 += luma * luma;
 
@@ -149,7 +147,7 @@ glm::vec3 CIntegrator::integrate_nee(CScene* scene, FRay ray, int32_t bounces, C
 	glm::vec3 out_color{ 0.f };
 
 	FHitResult hit_result{};
-	auto hit_something = scene->trace_ray(ray, 0.001f, std::numeric_limits<float>::infinity(), hit_result);
+	auto hit_something = scene->trace_ray(ray, ray_delta, std::numeric_limits<float>::infinity(), hit_result);
 
 	for (uint32_t depth = 0u; depth <= bounces; ++depth)
 	{
@@ -161,7 +159,7 @@ glm::vec3 CIntegrator::integrate_nee(CScene* scene, FRay ray, int32_t bounces, C
 
 		auto& material = m_pResourceManager->get_material(hit_result.m_material_id);
 
-		if (material->can_emit_light() && depth == 0)
+		if (material->can_emit_light() && depth == 0u)
 		{
 			out_color += throughput * material->emit(hit_result);
 
@@ -169,19 +167,20 @@ glm::vec3 CIntegrator::integrate_nee(CScene* scene, FRay ray, int32_t bounces, C
 				break;
 		}
 
-		float alpha{ 1.f };
-		glm::vec3 diffuse = material->sample_diffuse_color(hit_result, alpha);
+		glm::vec4 diffuse = material->sample_diffuse_color(hit_result);
 		glm::vec2 mr = material->sample_surface_metallic_roughness(hit_result);
 		glm::vec3 normal = material->sample_surface_normal(hit_result);
 		COrthonormalBasis basis(normal);
 
+		auto material_sample = sampler.sample_vec2();
+
 		if (depth == 0)
 		{
-			surface_albedo = diffuse;
-			surface_normal = normal;
+			surface_albedo += glm::vec3(diffuse);
+			surface_normal += normal;
 		}
 
-		bool is_transparent = alpha < sampler.sample();
+		bool is_transparent = material->check_transparency(diffuse, material_sample.x);
 
 		glm::vec3 wo = basis.to_local(glm::normalize(-ray.m_direction));
 
@@ -203,7 +202,7 @@ glm::vec3 CIntegrator::integrate_nee(CScene* scene, FRay ray, int32_t bounces, C
 			if (cos_theta_i > 0.f && light_pdf > 0.f)
 			{
 				FRay direct_ray;
-				direct_ray.m_origin = hit_result.m_position + math::sign(cos_theta(wi)) * normal * 0.001f;
+				direct_ray.m_origin = hit_result.m_position + math::sign(cos_theta(wi)) * normal * ray_delta;
 				if (is_transparent)
 					direct_ray.set_direction(ray.m_direction);
 				else
@@ -238,7 +237,7 @@ glm::vec3 CIntegrator::integrate_nee(CScene* scene, FRay ray, int32_t bounces, C
 
 		// Calculate indirect light
 		float bsdf_pdf{};
-		glm::vec3 wi = material->sample(wo, sampler.sample_vec2(), diffuse, mr, bsdf_pdf);
+		glm::vec3 wi = material->sample(wo, material_sample, diffuse, mr, bsdf_pdf);
 		float cos_theta_i = glm::abs(cos_theta(wi));
 		if (cos_theta_i <= 0.f || bsdf_pdf <= 0.f)
 			break;
@@ -246,7 +245,7 @@ glm::vec3 CIntegrator::integrate_nee(CScene* scene, FRay ray, int32_t bounces, C
 		glm::vec3 bsdf = material->eval(wi, wo, diffuse, mr);
 
 		FRay indirect_ray{};
-		indirect_ray.m_origin = hit_result.m_position + math::sign(cos_theta(wi)) * normal * 0.001f;
+		indirect_ray.m_origin = hit_result.m_position + math::sign(cos_theta(wi)) * normal * ray_delta;
 		indirect_ray.set_direction(basis.to_world(wi));
 
 		FHitResult indirect_hit{};
@@ -310,32 +309,39 @@ glm::vec3 CIntegrator::integrate(CScene* scene, FRay ray, int32_t bounces, CCMGS
 				break;
 		}
 
-		float alpha{ 1.f };
-		glm::vec3 diffuse = material->sample_diffuse_color(hit_result, alpha);
+		auto material_sample = sampler.sample_vec2();
+
+		glm::vec4 diffuse = material->sample_diffuse_color(hit_result);
 		glm::vec2 mr = material->sample_surface_metallic_roughness(hit_result);
 		glm::vec3 normal = material->sample_surface_normal(hit_result);
 		COrthonormalBasis basis(normal);
 
+		bool is_transparent = material->check_transparency(diffuse, material_sample.x);
+
 		if (depth == 0u)
 		{
-			surface_albedo += diffuse;
+			surface_albedo += glm::vec3(diffuse);
 			surface_normal += normal;
 		}
 
-		bool is_transparent = alpha < sampler.sample();
+		volatile int iiiiii = 0;
+		if (diffuse == glm::vec4(0.f) && is_transparent)
+			iiiiii++;
 
 		glm::vec3 wo = basis.to_local(glm::normalize(-ray.m_direction));
 
+		CLightSource* light{ nullptr };
 		float light_probability = scene->get_light_probability();
+		auto light_index = scene->get_light_index(sampler.sample());
 		if (!std::isinf(light_probability))
 		{
-			auto& light = scene->get_light(scene->get_light_index(sampler.sample()));
-
-			auto light_pdf = light->get_pdf();
-
+			light = scene->get_light(light_index).get();
+		
+			auto light_pdf = light->get_pdf(hit_result);
+		
 			auto light_direction = light->get_direction(hit_result);
 			glm::vec3 wi = basis.to_local(light_direction);
-
+		
 			float cos_theta_i = glm::abs(cos_theta(wi));
 			if (cos_theta_i > 0.f && light_pdf > 0.f)
 			{
@@ -343,7 +349,17 @@ glm::vec3 CIntegrator::integrate(CScene* scene, FRay ray, int32_t bounces, CCMGS
 				FHitResult shadow_hit;
 
 				auto distance = light->get_distance(hit_result);
-				if (!scene->trace_ray(shadow_ray, 0.f, distance, shadow_hit))
+				bool shadow_hit_something = scene->trace_ray(shadow_ray, 0.f, distance, shadow_hit);
+
+				bool is_transparent_shadow{ false };
+				if (shadow_hit_something)
+				{
+					auto& s_material = m_pResourceManager->get_material(shadow_hit.m_material_id);
+					glm::vec4 s_diffuse = s_material->sample_diffuse_color(shadow_hit);
+					is_transparent_shadow = s_material->check_transparency(s_diffuse, sampler.sample());
+				}
+				
+				if (!shadow_hit_something || is_transparent_shadow)
 				{
 					float bsdf_pdf = material->pdf(wi, wo, diffuse, mr);
 					if (bsdf_pdf > 0.f)
@@ -351,7 +367,7 @@ glm::vec3 CIntegrator::integrate(CScene* scene, FRay ray, int32_t bounces, CCMGS
 						auto bsdf = material->eval(wi, wo, diffuse, mr);
 						float weight = balance_heuristic(light_pdf, bsdf_pdf);
 						auto light_color = light->get_color(hit_result);
-
+		
 						out_color += throughput * light_color * bsdf * cos_theta_i * weight / (light_pdf * light_probability);
 					}
 				}
@@ -359,26 +375,43 @@ glm::vec3 CIntegrator::integrate(CScene* scene, FRay ray, int32_t bounces, CCMGS
 		}
 
 		float bsdf_pdf{};
-		glm::vec3 wi = material->sample(wo, sampler.sample_vec2(), diffuse, mr, bsdf_pdf);
+		glm::vec3 wi = material->sample(wo, material_sample, diffuse, mr, bsdf_pdf);
 		float cos_theta_i = glm::abs(cos_theta(wi));
 		if (cos_theta_i <= 0.f || bsdf_pdf <= 0.f)
-			break;
+		{
+			if (!is_transparent)
+				break;
+		}
+
+		if (is_transparent)
+		{
+			FHitResult indirect_hit{};
+			ray.m_origin = hit_result.m_position;
+			hit_something = scene->trace_ray(ray, ray_delta, std::numeric_limits<float>::infinity(), indirect_hit);
+			hit_result = indirect_hit;
+			continue;
+		}
+
+		FHitResult indirect_hit{};
+		ray.m_origin = hit_result.m_position + math::sign(cos_theta(wi)) * normal * ray_delta;
+		ray.set_direction(basis.to_world(wi));
+		hit_something = scene->trace_ray(ray, 0.f, std::numeric_limits<float>::infinity(), indirect_hit);
 
 		glm::vec3 bsdf = material->eval(wi, wo, diffuse, mr);
 		throughput *= bsdf * cos_theta_i / bsdf_pdf;
-
+		//assert(std::isfinite(throughput) && throughput.r >= 0.0f && throughput.g >= 0.0f && throughput.b >= 0.0f);
+		
 		float rr_prob = glm::min(0.95f, math::max_component(throughput));
+		assert(rr_prob > 0.0f && std::isfinite(rr_prob));
 		if (depth >= m_rrThreshold)
 		{
 			if (sampler.sample() > rr_prob)
 				break;
-
+		
 			throughput /= rr_prob;
 		}
 
-		ray.m_origin = hit_result.m_position + math::sign(cos_theta(wi)) * normal * ray_delta;
-		ray.set_direction(basis.to_world(wi));
-		hit_something = scene->trace_ray(ray, 0.f, std::numeric_limits<float>::infinity(), hit_result);
+		hit_result = indirect_hit;
 	}
 
 	return out_color;

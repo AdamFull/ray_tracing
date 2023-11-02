@@ -89,11 +89,12 @@ public:
 	bool can_scatter_light() const;
 	bool can_refract_light() const;
 
-	glm::vec3 sample(const glm::vec3& wo, const glm::vec2& sample, const glm::vec3& color, const glm::vec2& metallicRoughness, float& pdf) const;
-	glm::vec3 eval(const glm::vec3& wi, const glm::vec3& wo, const glm::vec3& color, const glm::vec2& metallicRoughness) const;
-	float pdf(const glm::vec3& wi, const glm::vec3& wo, const glm::vec3& color, const glm::vec2& metallicRoughness) const;
+	bool check_transparency(const glm::vec4& color, const float sample) const;
+	glm::vec3 sample(const glm::vec3& wo, const glm::vec2& sample, const glm::vec4& color, const glm::vec2& metallicRoughness, float& pdf) const;
+	glm::vec3 eval(const glm::vec3& wi, const glm::vec3& wo, const glm::vec4& color, const glm::vec2& metallicRoughness) const;
+	float pdf(const glm::vec3& wi, const glm::vec3& wo, const glm::vec4& color, const glm::vec2& metallicRoughness) const;
 
-	glm::vec3 sample_diffuse_color(const FHitResult& hit_result, float& alpha);
+	glm::vec4 sample_diffuse_color(const FHitResult& hit_result);
 	glm::vec3 sample_surface_normal(const FHitResult& hit_result) const;
 	glm::vec2 sample_surface_metallic_roughness(const FHitResult& hit_result) const;
 	
@@ -101,22 +102,22 @@ protected:
 	glm::vec4 sample_texture(ETextureType texture, const glm::vec2& uv) const;
 	glm::vec3 sample_tangent_space_normal(const glm::vec2& uv, const glm::vec3& tangent, const glm::vec3& bitangent, const glm::vec3& normal) const;
 
-	void compute_lobe_probabilities(const glm::vec3& wo, const glm::vec3& color, float metallic, const float& eta, float& diffuse, float& specular, float& transmittance) const;
+	void compute_lobe_probabilities(const glm::vec3& wo, const glm::vec4& color, float metallic, const float& eta, float& diffuse, float& specular, float& transmittance) const;
 protected:
 	std::unordered_map<ETextureType, resource_id_t> m_textures{};
 
-	glm::vec3 m_albedo{1.f};
+	glm::vec4 m_albedo{1.f};
 
 	float m_metallic{ 1.f };
 	float m_roughness{ 1.f };
 
-	glm::vec3 m_emissive{};
+	glm::vec3 m_emissive{ 0.f };
 	float m_emissionStrength{ 1.f };
 
 	float m_ior{ 1.5f };
 	float m_transmission{ 0.f };
 
-	EAlphaMode m_alphaMode{};
-	float m_alphaCutoff{};
+	EAlphaMode m_alphaMode{ EAlphaMode::eOpaque };
+	float m_alphaCutoff{ 0.5f };
 	CResourceManager* m_pResourceManager{ nullptr };
 };

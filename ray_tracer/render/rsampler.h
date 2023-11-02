@@ -13,7 +13,8 @@ public:
 	glm::vec2 sample_vec2() noexcept;
 
 	static glm::vec3 sample_cosine_hemisphere(const glm::vec2& sample) noexcept;
-	static glm::vec3 sample_ggx_vndf(const glm::vec3& wo, const glm::vec2& sample, float roughness) noexcept;
+	static glm::vec3 sample_ggx_vndf(const glm::vec3& wo, const glm::vec2& sample, float alpha) noexcept;
+	static glm::vec3 sample_ggx(const glm::vec3& wo, const glm::vec2& sample, float alpha) noexcept;
 private:
 	uint32_t m_nsamples_x{};
 	uint32_t m_nsamples_y{};
