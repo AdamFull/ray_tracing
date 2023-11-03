@@ -27,6 +27,10 @@ public:
 	const std::unique_ptr<CImage>& get_image(const std::string& name) const;
 	const std::unique_ptr<CImage>& get_image(resource_id_t id) const;
 
+	resource_id_t add_texture(const std::string& name, std::unique_ptr<CTexture>&& imageptr);
+	const std::unique_ptr<CTexture>& get_texture(const std::string& name) const;
+	const std::unique_ptr<CTexture>& get_texture(resource_id_t id) const;
+
 	// Material resource control
 	resource_id_t add_material(const std::string& name, std::unique_ptr<CMaterial>&& material);
 	const std::unique_ptr<CMaterial>& get_material(const std::string& name) const;
@@ -40,6 +44,7 @@ public:
 private:
 	std::unique_ptr<resource_container<CSampler>> m_pSamplerContainer{};
 	std::unique_ptr<resource_container<CImage>> m_pImageContainer{};
+	std::unique_ptr<resource_container<CTexture>> m_pTextureContainer{};
 	std::unique_ptr<resource_container<CMaterial>> m_pMaterialContainer{};
 	std::unique_ptr<resource_container<CVertexBuffer>> m_pVertexBufferContainer{};
 };

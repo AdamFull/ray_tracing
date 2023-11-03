@@ -139,7 +139,7 @@ glm::vec3 CCMGSampler::sample_ggx_vndf(const glm::vec3& wo, const glm::vec2& sam
 	
 	// Parameterization of projected area
 	float r = std::sqrt(sample.x);
-	float phi = 2.0f * glm::pi<float>() * sample.y;
+	float phi = 2.0f * std::numbers::pi_v<float> * sample.y;
 	float t1 = r * std::cos(phi);
 	float t2 = r * std::sin(phi);
 	float s = 0.5f * (1.0f + woHemi.z);
@@ -154,7 +154,7 @@ glm::vec3 CCMGSampler::sample_ggx_vndf(const glm::vec3& wo, const glm::vec2& sam
 
 glm::vec3 CCMGSampler::sample_ggx(const glm::vec3& wo, const glm::vec2& sample, float alpha) noexcept
 {
-	float phi = 2.f * glm::pi<float>() * sample.x;
+	float phi = 2.f * std::numbers::pi_v<float> * sample.x;
 	float cosTheta = std::sqrt((1.f - sample.y) / (1.f + (alpha * alpha - 1.f) * sample.y));
 	float sinTheta = std::sqrt(1.f - cosTheta * cosTheta);
 

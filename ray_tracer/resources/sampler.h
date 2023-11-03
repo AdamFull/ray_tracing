@@ -23,15 +23,14 @@ class CResourceManager;
 class CSampler
 {
 public:
-	CSampler(CResourceManager* resource_manager);
 	void create(EFilterMode filterMin, EFilterMode filterMag, EWrapMode wrapS, EWrapMode wrapT);
 
-	const glm::vec4& sample(resource_id_t image_id, const glm::vec2& uv);
-protected:
-	const glm::vec4& nearest_interpolation(CImage* image, uint32_t x, uint32_t y);
-	const glm::vec4& bilinear_interpolation(CImage* image, uint32_t x, uint32_t y);
+	glm::vec2 wrap(const glm::vec2& uv);
+	glm::vec4 interpolate(const glm::vec4* data, const glm::vec2& coord, float width, float height);
 private:
-	CResourceManager* m_pResourceManager{ nullptr };
+	glm::vec4 nearest_interpolation(const glm::vec4* data, const glm::vec2& coord, float width, float height);
+	glm::vec4 bilinear_interpolation(const glm::vec4* data, const glm::vec2& coord, float width, float height);
+private:
 	EFilterMode m_minFilter{};
 	EFilterMode m_magFilter{};
 	EWrapMode m_wrapS{};

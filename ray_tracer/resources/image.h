@@ -35,15 +35,34 @@ public:
 	void set_pixel(uint32_t x, uint32_t y, const glm::vec4& color);
 	const glm::vec4& get_pixel(uint32_t x, uint32_t y) const;
 
-	void set_sampler(resource_id_t id);
-	resource_id_t get_sampler() const;
-
 	const uint32_t get_width() const;
 	const uint32_t get_height() const;
+
+	const std::unique_ptr<glm::vec4[]>& get_raw() const;
 private:
 	glm::vec4 bilateral_filter(uint32_t x, uint32_t y, uint32_t radius, float sigmaI, float sigmaS);
 private:
 	uint32_t m_uWidth{ 0u }, m_uHeight{ 0u };
 	std::unique_ptr<glm::vec4[]> m_pData{};
-	resource_id_t m_sampler{ invalid_index };
+};
+
+class CTexture
+{
+public:
+	CTexture() = default;
+	CTexture(CResourceManager* resource_manager);
+	void create(resource_id_t image_source, resource_id_t sampler_source);
+
+	void initialize_texture_transform_khr(const glm::vec2& offset, const glm::vec2& scale, const float rotation);
+
+	const std::unique_ptr<CImage>& get_image() const;
+
+	glm::vec4 sample(const glm::vec2& uv);
+private:
+	CResourceManager* m_pResourceManager{ nullptr };
+
+	resource_id_t m_image{ invalid_index }, m_sampler{ invalid_index };
+
+	// KHR_texture_transform
+	glm::mat3 m_uv_model{ 1.f };
 };

@@ -1,39 +1,12 @@
 #pragma once
 
-inline float cos_theta(const glm::vec3& w) noexcept
-{
-	return w.z;
-}
-
-inline float cos_theta_sq(const glm::vec3& w) noexcept
-{
-	return cos_theta(w) * cos_theta(w);
-}
-
-inline float sin_theta_sq(const glm::vec3& w) noexcept
-{ 
-	return glm::max(0.f, 1.f - cos_theta_sq(w));
-}
-
-inline float sin_theta(const glm::vec3& w) noexcept 
-{ 
-	return glm::sqrt(sin_theta_sq(w));
-}
-
-inline float tan_theta(const glm::vec3& w) noexcept 
-{ 
-	return sin_theta(w) / cos_theta(w);
-}
-
-inline float tan_theta_sq(const glm::vec3& w) noexcept 
-{ 
-	return sin_theta_sq(w) / cos_theta_sq(w);
-}
-
-inline bool on_same_hemisphere(const glm::vec3& wi, const glm::vec3& wo) noexcept
-{
-	return wi.z * wo.z > 0.f;
-}
+inline float cos_theta(const glm::vec3& w) noexcept { return w.z; }
+inline float cos_theta_sq(const glm::vec3& w) noexcept { return w.z * w.z; }
+inline float sin_theta_sq(const glm::vec3& w) noexcept { return glm::max(0.f, 1.f - cos_theta_sq(w)); }
+inline float sin_theta(const glm::vec3& w) noexcept { return glm::sqrt(sin_theta_sq(w)); }
+inline float tan_theta(const glm::vec3& w) noexcept { return sin_theta(w) / cos_theta(w); }
+inline float tan_theta_sq(const glm::vec3& w) noexcept { return sin_theta_sq(w) / cos_theta_sq(w); }
+inline bool on_same_hemisphere(const glm::vec3& wi, const glm::vec3& wo) noexcept { return wi.z * wo.z > 0.f; }
 
 // ggx
 inline float D_GGX(const glm::vec3& wh, float alpha) noexcept
@@ -51,6 +24,11 @@ inline float Smith_G1_GGX(const glm::vec3& w, float alpha) noexcept
 	assert(alphaSq * tanTheraSq >= -1.0f);
 	float lambda = (-1.0f + std::sqrt(alphaSq * tanTheraSq + 1.0f)) / 2.0f;
 	return 1.0f / (1.0f + lambda);
+}
+
+inline float G2_Smith_Uncorrelated_GGX(const glm::vec3& wi, const glm::vec3& wo, float alpha)
+{
+	return Smith_G1_GGX(wi, alpha) * Smith_G1_GGX(wo, alpha);
 }
 
 inline float Smith_G2_Height_Correlated_GGX(const glm::vec3& wi, const glm::vec3& wo, float alpha)
@@ -89,7 +67,7 @@ inline glm::vec3 lambert_diffuse(const glm::vec3& wi, const glm::vec3& wo, const
 	return diffuse_color / std::numbers::pi_v<float>;
 }
 
-inline glm::vec3 microfacet_reflection_ggx(const glm::vec3& wi, const glm::vec3& wo, const glm::vec3& f0, float eta, float alpha)
+inline glm::vec3 microfacet_reflection_ggx(const glm::vec3& wi, const glm::vec3& wo, const glm::vec3& n, const glm::vec3& f0, float eta, float alpha)
 {
 	if (!on_same_hemisphere(wi, wo) || cos_theta(wi) == 0.0f || cos_theta(wo) == 0.0f)
 		return glm::vec3(0.0f);
@@ -111,6 +89,7 @@ inline glm::vec3 microfacet_reflection_ggx(const glm::vec3& wi, const glm::vec3&
 	
 	float G = Smith_G2_Height_Correlated_GGX(wi, wo, alpha);
 	float D = D_GGX(wh, alpha);
+
 	return F * G * D / (4.0f * glm::abs(cos_theta(wi)) * glm::abs(cos_theta(wo)));
 }
 
@@ -148,7 +127,7 @@ inline float cosine_weighted_pdf(const glm::vec3& wi, const glm::vec3& wo) noexc
 	return on_same_hemisphere(wi, wo) ? cos_theta(wi) / std::numbers::pi_v<float> : 0.f;
 }
 
-inline float ggx_vndf_reflection_pdf(const glm::vec3& wi, const glm::vec3& wo, float alpha) noexcept
+inline float ggx_vndf_reflection_pdf(const glm::vec3& wi, const glm::vec3& wo, const glm::vec3& n, float alpha) noexcept
 {
 	if (!on_same_hemisphere(wi, wo))
 		return 0.0f;

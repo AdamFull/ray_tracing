@@ -52,6 +52,44 @@ std::string url_decode(const std::string& str)
 	return ret;
 }
 
+// KHR_texture_transform
+template<class _Ty>
+void apply_texture_transform_khr(const _Ty& texture, const std::unique_ptr<CTexture>& texture_ptr)
+{
+	glm::vec2 offset{ 0.f }, scale{ 1.f };
+	float rotation{ 0.f };
+
+	auto found_extension = texture.extensions.find("KHR_texture_transform");
+	if (found_extension != texture.extensions.end())
+	{
+		auto& extension = found_extension->second;
+
+		if (extension.Has("rotation"))
+		{
+			auto obj = extension.Get("rotation");
+			rotation = static_cast<float>(obj.GetNumberAsDouble());
+		}
+
+		if (extension.Has("offset"))
+		{
+			auto obj = extension.Get("offset");
+			auto x = const_cast<tinygltf::Value*>(&obj.Get(0));
+			auto y = const_cast<tinygltf::Value*>(&obj.Get(1));
+			offset = glm::vec2(x->GetNumberAsDouble(), y->GetNumberAsDouble());
+		}
+
+		if (extension.Has("scale"))
+		{
+			auto obj = extension.Get("scale");
+			auto x = const_cast<tinygltf::Value*>(&obj.Get(0));
+			auto y = const_cast<tinygltf::Value*>(&obj.Get(1));
+			scale = glm::vec2(x->GetNumberAsDouble(), y->GetNumberAsDouble());
+		}
+	}
+
+	texture_ptr->initialize_texture_transform_khr(offset, scale, rotation);
+}
+
 entt::entity create_node(entt::registry& registry, const std::string& name)
 {
 	auto entity = registry.create();
@@ -206,7 +244,7 @@ void CScene::load_samplers(const tinygltf::Model& model)
 {
 	for (auto& sampler : model.samplers)
 	{
-		auto new_sampler = std::make_unique<CSampler>(m_pResourceManager);
+		auto new_sampler = std::make_unique<CSampler>();
 		new_sampler->create(
 			static_cast<EFilterMode>(sampler.minFilter),
 			static_cast<EFilterMode>(sampler.magFilter),
@@ -263,12 +301,16 @@ void CScene::load_image(tinygltf::Image* image, const int imageIndex, std::strin
 
 void CScene::load_textures(const tinygltf::Model& model)
 {
+	size_t texture_index{ 0ull };
 	for (auto& texture : model.textures)
 	{
 		auto& image_id = m_vImageIds.at(texture.source);
-		auto& image_ptr = m_pResourceManager->get_image(image_id);
-		image_ptr->set_sampler(m_vSamplerIds[texture.sampler]);
-		m_vTextureIds.emplace_back(image_id);
+		auto& sampler_id = m_vSamplerIds[texture.sampler];
+
+		auto texture_ptr = std::make_unique<CTexture>(m_pResourceManager);
+		texture_ptr->create(image_id, sampler_id);
+		m_vTextureIds.emplace_back(m_pResourceManager->add_texture(std::format("texture_{}_{}_{}_{}", texture.name, texture_index, image_id, sampler_id), std::move(texture_ptr)));
+		++texture_index;
 	}
 
 	log_verbose("Loaded {} textures.", m_vTextureIds.size());
@@ -291,38 +333,48 @@ void CScene::load_materials(const tinygltf::Model& model)
 		if (mat.values.find("baseColorTexture") != mat.values.end())
 		{
 			auto texture = mat.values.at("baseColorTexture");
-			material_ci.m_textures.emplace(ETextureType::eAlbedo, m_vTextureIds.at(texture.TextureIndex()));
+			auto image_id = m_vTextureIds.at(texture.TextureIndex());
+			material_ci.m_textures.emplace(ETextureType::eAlbedo, image_id);
 			material_name += std::to_string(texture.TextureIndex());
+			apply_texture_transform_khr(mat.pbrMetallicRoughness.baseColorTexture, m_pResourceManager->get_texture(image_id));
 		}
 
 		if (mat.values.find("metallicRoughnessTexture") != mat.values.end())
 		{
 			auto texture = mat.values.at("metallicRoughnessTexture");
-			material_ci.m_textures.emplace(ETextureType::eMetallRoughness, m_vTextureIds.at(texture.TextureIndex()));
+			auto image_id = m_vTextureIds.at(texture.TextureIndex());
+			material_ci.m_textures.emplace(ETextureType::eMetallRoughness, image_id);
 			material_name += std::to_string(texture.TextureIndex());
+			apply_texture_transform_khr(mat.pbrMetallicRoughness.metallicRoughnessTexture, m_pResourceManager->get_texture(image_id));
 		}
 
 		if (mat.additionalValues.find("normalTexture") != mat.additionalValues.end())
 		{
 			auto texture = mat.additionalValues.at("normalTexture");
+			auto image_id = m_vTextureIds.at(texture.TextureIndex());
 			material_ci.m_fNormalMapScale = static_cast<float>(texture.TextureScale());
-			material_ci.m_textures.emplace(ETextureType::eNormal, m_vTextureIds.at(texture.TextureIndex()));
+			material_ci.m_textures.emplace(ETextureType::eNormal, image_id);
 			material_name += std::to_string(texture.TextureIndex());
+			apply_texture_transform_khr(mat.normalTexture, m_pResourceManager->get_texture(image_id));
 		}
 
 		if (mat.additionalValues.find("occlusionTexture") != mat.additionalValues.end())
 		{
 			auto texture = mat.additionalValues.at("occlusionTexture");
+			auto image_id = m_vTextureIds.at(texture.TextureIndex());
 			material_ci.m_fOcclusionStrength = static_cast<float>(texture.TextureStrength());
-			material_ci.m_textures.emplace(ETextureType::eAmbientOcclusion, m_vTextureIds.at(texture.TextureIndex()));
+			material_ci.m_textures.emplace(ETextureType::eAmbientOcclusion, image_id);
 			material_name += std::to_string(texture.TextureIndex());
+			apply_texture_transform_khr(mat.occlusionTexture, m_pResourceManager->get_texture(image_id));
 		}
 
 		if (mat.additionalValues.find("emissiveTexture") != mat.additionalValues.end())
 		{
 			auto texture = mat.additionalValues.at("emissiveTexture");
-			material_ci.m_textures.emplace(ETextureType::eEmission, m_vTextureIds.at(texture.TextureIndex()));
+			auto image_id = m_vTextureIds.at(texture.TextureIndex());
+			material_ci.m_textures.emplace(ETextureType::eEmission, image_id);
 			material_name += std::to_string(texture.TextureIndex());
+			apply_texture_transform_khr(mat.emissiveTexture, m_pResourceManager->get_texture(image_id));
 		}
 
 		if (mat.additionalValues.find("emissiveFactor") != mat.additionalValues.end())

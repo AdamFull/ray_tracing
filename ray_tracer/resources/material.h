@@ -90,9 +90,9 @@ public:
 	bool can_refract_light() const;
 
 	bool check_transparency(const glm::vec4& color, const float sample) const;
-	glm::vec3 sample(const glm::vec3& wo, const glm::vec2& sample, const glm::vec4& color, const glm::vec2& metallicRoughness, float& pdf) const;
-	glm::vec3 eval(const glm::vec3& wi, const glm::vec3& wo, const glm::vec4& color, const glm::vec2& metallicRoughness) const;
-	float pdf(const glm::vec3& wi, const glm::vec3& wo, const glm::vec4& color, const glm::vec2& metallicRoughness) const;
+	glm::vec3 sample(const glm::vec3& wo, const glm::vec3& n, const glm::vec2& sample, const glm::vec4& color, const glm::vec2& metallicRoughness, float& pdf) const;
+	glm::vec3 eval(const glm::vec3& wi, const glm::vec3& wo, const glm::vec3& n, const glm::vec4& color, const glm::vec2& metallicRoughness) const;
+	float pdf(const glm::vec3& wi, const glm::vec3& wo, const glm::vec3& n, const glm::vec4& color, const glm::vec2& metallicRoughness) const;
 
 	glm::vec4 sample_diffuse_color(const FHitResult& hit_result);
 	glm::vec3 sample_surface_normal(const FHitResult& hit_result) const;

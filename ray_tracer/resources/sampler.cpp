@@ -1,8 +1,21 @@
 #include "resource_manager.h"
 
-CSampler::CSampler(CResourceManager* resource_manager)
+float wrap_value(float n, EWrapMode wrap_mode)
 {
-	m_pResourceManager = resource_manager;
+	float wrapped{ n };
+
+	switch (wrap_mode)
+	{
+	case EWrapMode::eRepeat: wrapped = n - std::floor(n); break;
+	case EWrapMode::eClampToEdge: wrapped = glm::clamp(n, 0.f, 1.f); break;
+	case EWrapMode::eMirroredRepeat:
+	{
+		float factor = 2.0f * std::floor(std::abs(n));
+		bool is_even = ((int)factor % 2) == 0;
+		wrapped = is_even ? n - std::floor(n) : 1.0f - (n - std::floor(n));
+	} break;
+	}
+	return wrapped;
 }
 
 void CSampler::create(EFilterMode filterMin, EFilterMode filterMag, EWrapMode wrapS, EWrapMode wrapT)
@@ -13,90 +26,55 @@ void CSampler::create(EFilterMode filterMin, EFilterMode filterMag, EWrapMode wr
 	m_wrapT = wrapT;
 }
 
-const glm::vec4& CSampler::sample(resource_id_t image_id, const glm::vec2& uv)
+glm::vec2 CSampler::wrap(const glm::vec2& uv)
 {
-	auto& image = m_pResourceManager->get_image(image_id);
-
-	uint32_t width = image->get_width();
-	uint32_t height = image->get_height();
-
-	uint32_t x = static_cast<uint32_t>(uv.x * static_cast<float>(width));
-	uint32_t y = static_cast<uint32_t>(uv.y * static_cast<float>(height));
-
-	// Wrap S
-	switch (m_wrapS)
-	{
-	case EWrapMode::eRepeat:
-		x %= width;
-		break;
-	case EWrapMode::eClampToEdge:
-		x = glm::clamp(x, 0u, width);
-		break;
-	case EWrapMode::eMirroredRepeat:
-	{
-		if ((x / width) % 2u == 0u)
-			x = x % width;
-		else
-			x = width - 1u - (x % width);
-	} break;
-	default:
-		break;
-	}
-
-	// Wrap T
-	switch (m_wrapT)
-	{
-	case EWrapMode::eRepeat:
-		y %= height;
-		break;
-	case EWrapMode::eClampToEdge:
-		y = glm::clamp(y, 0u, height);
-		break;
-	case EWrapMode::eMirroredRepeat:
-	{
-		if ((y / height) % 2u == 0u)
-			y = y % height;
-		else
-			y = height - 1u - (y % height);
-	} break;
-	default:
-		break;
-	}
-
-	// Sampling
-	return nearest_interpolation(image.get(), x, y);
+	glm::vec2 wrapped{ 0.f };
+	wrapped.x = wrap_value(uv.x, m_wrapS);
+	wrapped.y = wrap_value(uv.y, m_wrapT);
+	return wrapped;
 }
 
-const glm::vec4& CSampler::nearest_interpolation(CImage* image, uint32_t x, uint32_t y)
+glm::vec4 CSampler::interpolate(const glm::vec4* data, const glm::vec2& coord, float width, float height)
 {
-	return image->get_pixel(x, y);
+	glm::vec4 interpolated_color{ 0.f };
+
+	auto screenspace_uv = glm::vec2(coord.x * (width - 1.f), coord.y * (height - 1.f));
+
+	if (m_minFilter == EFilterMode::eNearest || m_minFilter == EFilterMode::eNearestMipmapLinear || m_minFilter == EFilterMode::eNearestMipmapNearest)
+		interpolated_color = nearest_interpolation(data, screenspace_uv, width, height);
+	else if(m_minFilter == EFilterMode::eLinear || m_minFilter == EFilterMode::eLinearMipmapLinear || m_minFilter == EFilterMode::eLinearMipmapNearest)
+		interpolated_color = bilinear_interpolation(data, screenspace_uv, width, height);
+
+	return interpolated_color;
 }
 
-const glm::vec4& CSampler::bilinear_interpolation(CImage* image, uint32_t x0, uint32_t y0)
+glm::vec4 CSampler::nearest_interpolation(const glm::vec4* data, const glm::vec2& coord, float width, float height)
 {
-	uint32_t width = image->get_width();
-	uint32_t heigth = image->get_height();
+	uint32_t px = static_cast<uint32_t>(coord.x);
+	uint32_t py = static_cast<uint32_t>(coord.y);
 
-	uint32_t x1 = (x0 + 1u) % width;
-	uint32_t y1 = (y0 + 1u) % heigth;
+	return data[px + py * static_cast<uint32_t>(width)];
+}
 
-	x0 = (x0 % width + width) % width;
-	y0 = (y0 % heigth + heigth) % heigth;
+// Based on https://fastcpp.blogspot.com/2011/06/bilinear-pixel-interpolation-using-sse.html
+glm::vec4 CSampler::bilinear_interpolation(const glm::vec4* data, const glm::vec2& coord, float width, float height)
+{
+	int32_t px0 = static_cast<int32_t>(coord.x);
+	int32_t py0 = static_cast<int32_t>(coord.y);
+	int32_t px1 = std::min(px0 + 1, static_cast<int32_t>(width - 1.f));
+	int32_t py1 = std::min(py0 + 1, static_cast<int32_t>(height - 1.f));
 
-	glm::vec4 Q11 = image->get_pixel(x0, y0);
-	glm::vec4 Q12 = image->get_pixel(x0, y1);
-	glm::vec4 Q21 = image->get_pixel(x1, y0);
-	glm::vec4 Q22 = image->get_pixel(x1, y1);
+	float fx = coord.x - px0;
+	float fy = coord.y - py0;
 
-	float x1_x0 = x1 - x1;
-	float y1_y0 = y1 - y0;
-	float x0_x1 = x0 - x1;
-	float y0_y1 = y0 - y1;
+	auto stride = static_cast<int32_t>(width);
+	const auto& p0 = data[px0 + py0 * stride];
+	const auto& p1 = data[px1 + py0 * stride];
+	const auto& p2 = data[px0 + py1 * stride];
+	const auto& p3 = data[px1 + py1 * stride];
 
-	glm::vec4 R1 = (x1_x0 * Q11 + x0_x1 * Q21) / x1_x0;
-	glm::vec4 R2 = (x1_x0 * Q12 + x0_x1 * Q22) / x1_x0;
+	auto topMix = p0 + fx * (p1 - p0);
+	auto bottomMix = p2 + fx * (p3 - p2);
 
-	glm::vec4 P = (y1_y0 * R1 + y0_y1 * R2) / y1_y0;
-
-	return P;
+	return topMix + fy * (bottomMix - topMix);
 }

@@ -9,6 +9,7 @@ void CResourceManager::create()
 {
 	m_pSamplerContainer = std::make_unique<resource_container<CSampler>>();
 	m_pImageContainer = std::make_unique<resource_container<CImage>>();
+	m_pTextureContainer = std::make_unique<resource_container<CTexture>>();
 	m_pMaterialContainer = std::make_unique<resource_container<CMaterial>>();
 	m_pVertexBufferContainer = std::make_unique<resource_container<CVertexBuffer>>();
 }
@@ -65,6 +66,22 @@ const std::unique_ptr<CImage>& CResourceManager::get_image(const std::string& na
 const std::unique_ptr<CImage>& CResourceManager::get_image(resource_id_t id) const
 {
 	return m_pImageContainer->get(id);
+}
+
+
+resource_id_t CResourceManager::add_texture(const std::string& name, std::unique_ptr<CTexture>&& imageptr)
+{
+	return m_pTextureContainer->add(name, std::move(imageptr));
+}
+
+const std::unique_ptr<CTexture>& CResourceManager::get_texture(const std::string& name) const
+{
+	return m_pTextureContainer->get(name);
+}
+
+const std::unique_ptr<CTexture>& CResourceManager::get_texture(resource_id_t id) const
+{
+	return m_pTextureContainer->get(id);
 }
 
 

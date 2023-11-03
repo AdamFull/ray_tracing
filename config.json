@@ -21,7 +21,7 @@
     "exposure": 2.0
   },
   "scene": {
-    "path": "D:\\GitHub\\ray_tracing\\meshes\\Tests\\AlphaBlendModeTest\\AlphaBlendModeTest.gltf",
+    "path": "D:\\GitHub\\ray_tracing\\meshes\\round1\\high-res.glb",
     "skybox": {
       "gradient": {
         "begin": [ 1.0, 1.0, 1.0 ],

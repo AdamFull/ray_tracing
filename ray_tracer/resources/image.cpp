@@ -1,4 +1,4 @@
-#include "image.h"
+#include "resource_manager.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -114,16 +114,6 @@ const glm::vec4& CImage::get_pixel(uint32_t x, uint32_t y) const
 	return m_pData[y * m_uWidth + x];
 }
 
-void CImage::set_sampler(resource_id_t id)
-{
-	m_sampler = id;
-}
-
-resource_id_t CImage::get_sampler() const
-{
-	return m_sampler;
-}
-
 const uint32_t CImage::get_width() const
 {
 	return m_uWidth;
@@ -132,6 +122,11 @@ const uint32_t CImage::get_width() const
 const uint32_t CImage::get_height() const
 {
 	return m_uHeight;
+}
+
+const std::unique_ptr<glm::vec4[]>& CImage::get_raw() const
+{
+	return m_pData;
 }
 
 glm::vec4 CImage::bilateral_filter(uint32_t x, uint32_t y, uint32_t radius, float sigmaI, float sigmaS)
@@ -157,4 +152,48 @@ glm::vec4 CImage::bilateral_filter(uint32_t x, uint32_t y, uint32_t radius, floa
 		}
 	}
 	return result / weightSum;
+}
+
+
+
+CTexture::CTexture(CResourceManager* resource_manager)
+{
+	m_pResourceManager = resource_manager;
+}
+
+void CTexture::create(resource_id_t image_source, resource_id_t sampler_source)
+{
+	m_image = image_source;
+	m_sampler = sampler_source;
+}
+
+void CTexture::initialize_texture_transform_khr(const glm::vec2& offset, const glm::vec2& scale, const float rotation)
+{
+	glm::mat3 translation_m = glm::mat3(1.f, 0.f, 0.f, 0.f, 1.f, 0.f, offset.x, offset.y, 1.f);
+
+	float sin_theta = glm::sin(rotation);
+	float cos_theta = glm::cos(rotation);
+	glm::mat3 rotation_m = glm::mat3(cos_theta, sin_theta, 0.f, -sin_theta, cos_theta, 0.f, 0.f, 0.f, 1.f);
+	glm::mat3 scale_m = glm::mat3(scale.x, 0.f, 0.f, 0.f, scale.y, 0.f, 0.f, 0.f, 1.f);
+
+	m_uv_model = translation_m * rotation_m * scale_m;
+}
+
+const std::unique_ptr<CImage>& CTexture::get_image() const
+{
+	return m_pResourceManager->get_image(m_image);
+}
+
+glm::vec4 CTexture::sample(const glm::vec2& uv)
+{
+	auto& sampler = m_pResourceManager->get_sampler(m_sampler);
+	auto& image = m_pResourceManager->get_image(m_image);
+
+	auto n_uv = glm::vec2(m_uv_model * glm::vec3(uv, 1.f));
+
+	float img_width = static_cast<float>(image->get_width());
+	float img_height = static_cast<float>(image->get_height());
+
+	glm::vec2 texcoord = sampler->wrap(n_uv);
+	return sampler->interpolate(image->get_raw().get(), texcoord, img_width, img_height);
 }

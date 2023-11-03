@@ -30,9 +30,6 @@ void CMaterial::create(const FMaterialCreateInfo& createInfo)
 
 glm::vec3 CMaterial::emit(const FHitResult& hit_result) const
 {
-	if (!hit_result.m_bFrontFace)
-		return glm::vec3(0.f);
-
 	glm::vec3 emission{ m_emissive };
 	if (m_textures.count(ETextureType::eEmission))
 		emission *= glm::vec3(srgb_to_linear(sample_texture(ETextureType::eEmission, hit_result.m_texcoord)));
@@ -69,7 +66,7 @@ bool CMaterial::check_transparency(const glm::vec4& color, const float sample) c
 	return is_transparent;
 }
 
-glm::vec3 CMaterial::sample(const glm::vec3& wo, const glm::vec2& sample, const glm::vec4& color, const glm::vec2& metallicRoughness, float& pdf) const
+glm::vec3 CMaterial::sample(const glm::vec3& wo, const glm::vec3& n, const glm::vec2& sample, const glm::vec4& color, const glm::vec2& metallicRoughness, float& pdf) const
 {
 	float eta = cos_theta(wo) > 0.f ? 1.f / m_ior : m_ior;
 
@@ -97,7 +94,7 @@ glm::vec3 CMaterial::sample(const glm::vec3& wo, const glm::vec2& sample, const 
 		assert(u >= 0.0f && v < 1.0f);
 
 		glm::vec3 wo_upper = math::sign(cos_theta(wo)) * wo;
-		glm::vec3 wh = math::sign(cos_theta(wo)) * CCMGSampler::sample_ggx(wo, glm::vec2(u, v), metallicRoughness.g);
+		glm::vec3 wh = math::sign(cos_theta(wo)) * CCMGSampler::sample_ggx_vndf(wo_upper, glm::vec2(u, v), metallicRoughness.g);
 		if (glm::dot(wo, wh) < 0.0f)
 			return glm::vec3(0.0f);
 
@@ -111,7 +108,7 @@ glm::vec3 CMaterial::sample(const glm::vec3& wo, const glm::vec2& sample, const 
 		assert(u >= 0.0f && v < 1.0f);
 	
 		glm::vec3 wo_upper = math::sign(cos_theta(wo)) * wo;
-		glm::vec3 wh = math::sign(cos_theta(wo)) * CCMGSampler::sample_ggx(wo, glm::vec2(u, v), metallicRoughness.g);
+		glm::vec3 wh = math::sign(cos_theta(wo)) * CCMGSampler::sample_ggx_vndf(wo_upper, glm::vec2(u, v), metallicRoughness.g);
 		if (glm::dot(wo, wh) < 0.0f)
 			return glm::vec3(0.0f);
 	
@@ -126,14 +123,14 @@ glm::vec3 CMaterial::sample(const glm::vec3& wo, const glm::vec2& sample, const 
 	}
 
 	if (color.a > 0.f)
-		pdf = diffuse_weight * cosine_weighted_pdf(wi, wo) + specular_weight * ggx_vndf_reflection_pdf(wi, wo, metallicRoughness.g) + transmittance_weight * ggx_vndf_transmission_pdf(wi, wo, eta, metallicRoughness.g);
+		pdf = diffuse_weight * cosine_weighted_pdf(wi, wo) + specular_weight * ggx_vndf_reflection_pdf(wi, wo, n, metallicRoughness.g) + transmittance_weight * ggx_vndf_transmission_pdf(wi, wo, eta, metallicRoughness.g);
 	else
 		pdf = 1.f;
 
 	return wi;
 }
 
-glm::vec3 CMaterial::eval(const glm::vec3& wi, const glm::vec3& wo, const glm::vec4& color, const glm::vec2& metallicRoughness) const
+glm::vec3 CMaterial::eval(const glm::vec3& wi, const glm::vec3& wo, const glm::vec3& n, const glm::vec4& color, const glm::vec2& metallicRoughness) const
 {
 	if (color.a == 0.f)
 		return glm::vec3(0.f);
@@ -144,7 +141,7 @@ glm::vec3 CMaterial::eval(const glm::vec3& wi, const glm::vec3& wo, const glm::v
 	glm::vec3 f0 = glm::mix(F0_Schlick(eta), diffuse_color, metallicRoughness.r);
 
 	glm::vec3 diffuse = lambert_diffuse(wi, wo, diffuse_color);
-	glm::vec3 specular = microfacet_reflection_ggx(wi, wo, f0, eta, metallicRoughness.g);
+	glm::vec3 specular = microfacet_reflection_ggx(wi, wo, n, f0, eta, metallicRoughness.g);
 	glm::vec3 transmission = diffuse_color * microfacet_transmission_ggx(wi, wo, f0, eta, metallicRoughness.g);
 
 	float diffuse_weight = (1.f - metallicRoughness.r) * (1.f - m_transmission);
@@ -153,7 +150,7 @@ glm::vec3 CMaterial::eval(const glm::vec3& wi, const glm::vec3& wo, const glm::v
 	return diffuse_weight * diffuse + specular + transmission_weight * transmission;
 }
 
-float CMaterial::pdf(const glm::vec3& wi, const glm::vec3& wo, const glm::vec4& color, const glm::vec2& metallicRoughness) const
+float CMaterial::pdf(const glm::vec3& wi, const glm::vec3& wo, const glm::vec3& n, const glm::vec4& color, const glm::vec2& metallicRoughness) const
 {
 	if (color.a == 0.f)
 		return 0.f;
@@ -162,7 +159,7 @@ float CMaterial::pdf(const glm::vec3& wi, const glm::vec3& wo, const glm::vec4& 
 	float diffuse_weight{ 0.f }, specular_weight{ 0.f }, transmission_weight{ 0.f };
 	compute_lobe_probabilities(wo, color, metallicRoughness.r, eta, diffuse_weight, specular_weight, transmission_weight);
 
-	return diffuse_weight * cosine_weighted_pdf(wi, wo) + specular_weight * ggx_vndf_reflection_pdf(wi, wo, metallicRoughness.g) + transmission_weight * ggx_vndf_transmission_pdf(wi, wo, eta, metallicRoughness.g);
+	return diffuse_weight * cosine_weighted_pdf(wi, wo) + specular_weight * ggx_vndf_reflection_pdf(wi, wo, n, metallicRoughness.g) + transmission_weight * ggx_vndf_transmission_pdf(wi, wo, eta, metallicRoughness.g);
 }
 
 glm::vec3 CMaterial::sample_surface_normal(const FHitResult& hit_result) const
@@ -174,10 +171,7 @@ glm::vec4 CMaterial::sample_diffuse_color(const FHitResult& hit_result)
 {
 	auto diffuse = m_albedo * glm::vec4(hit_result.m_color, 1.f);
 	if (m_textures.count(ETextureType::eAlbedo))
-	{
-		auto color = sample_texture(ETextureType::eAlbedo, hit_result.m_texcoord);
-		diffuse *= srgb_to_linear(color);
-	}
+		diffuse *= srgb_to_linear(sample_texture(ETextureType::eAlbedo, hit_result.m_texcoord));
 	return diffuse;
 }
 
@@ -186,11 +180,11 @@ glm::vec2 CMaterial::sample_surface_metallic_roughness(const FHitResult& hit_res
 	glm::vec2 mr{ m_metallic, m_roughness };
 	if (m_textures.count(ETextureType::eMetallRoughness))
 	{
-		auto sampled_mr = glm::vec3(sample_texture(ETextureType::eMetallRoughness, hit_result.m_texcoord));
+		auto sampled_mr = sample_texture(ETextureType::eMetallRoughness, hit_result.m_texcoord);
 
-		mr.g = mr.g * sampled_mr.g;
-		mr.g = glm::max(0.001f, mr.g * mr.g);
-		mr.r = mr.r * sampled_mr.b;
+		mr.y = mr.y * sampled_mr.g;
+		mr.y = glm::max(0.001f, mr.y * mr.y);
+		mr.x = mr.x * sampled_mr.b;
 	}
 
 	return mr;
@@ -201,10 +195,8 @@ glm::vec4 CMaterial::sample_texture(ETextureType texture, const glm::vec2& uv) c
 	auto found_texture = m_textures.find(texture);
 	if (found_texture != m_textures.end())
 	{
-		auto& image = m_pResourceManager->get_image(found_texture->second);
-		auto& sampler = m_pResourceManager->get_sampler(image->get_sampler());
-
-		return sampler->sample(found_texture->second, uv);
+		auto& texture = m_pResourceManager->get_texture(found_texture->second);
+		return texture->sample(uv);
 	}
 
 	return glm::vec4(0.f);
@@ -216,13 +208,6 @@ glm::vec3 CMaterial::sample_tangent_space_normal(const glm::vec2& uv, const glm:
 		return normal;
 
 	auto sampled_normal = glm::vec3(sample_texture(ETextureType::eNormal, uv));
-
-	if (math::isnan(tangent) || math::isnan(bitangent))
-	{
-		COrthonormalBasis otb(normal);
-		return glm::normalize(otb.to_local(((2.f * sampled_normal - 1.f) * glm::vec3(1.f, 1.f, 1.f))));
-	}
-	
 	return glm::normalize(glm::mat3(tangent, bitangent, normal) * ((2.f * sampled_normal - 1.f) * glm::vec3(1.f, 1.f, 1.f)));
 }
 
