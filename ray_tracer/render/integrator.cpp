@@ -230,8 +230,11 @@ glm::vec3 CIntegrator::integrate_nee(CScene* scene, FRay ray, int32_t bounces, c
 						auto& light_material = m_pResourceManager->get_material(light->get_material_id());
 						auto emittance = light_material->emit(direct_hit);
 						auto bsdf = material->eval(wi, wo, normal, diffuse, mr);
-						float weight = balance_heuristic(light_pdf, bsdf_pdf);
-						out_color += throughput * emittance * bsdf * cos_theta_i * weight / (light_pdf * light_probability);
+						// Light-sampling pdf (solid angle) must include the 1/N probability of
+						// having selected this light, so both MIS strategies share one measure.
+						float light_sampling_pdf = light_pdf * light_probability;
+						float weight = balance_heuristic(light_sampling_pdf, bsdf_pdf);
+						out_color += throughput * emittance * bsdf * cos_theta_i * weight / light_sampling_pdf;
 					}
 				}
 			}
@@ -264,17 +267,24 @@ glm::vec3 CIntegrator::integrate_nee(CScene* scene, FRay ray, int32_t bounces, c
 
 		FHitResult indirect_hit{};
 		bool indirect_hit_something = scene->trace_ray(indirect_ray, 0.f, std::numeric_limits<float>::infinity(), indirect_hit);
-		if (indirect_hit_something && light_index == indirect_hit.m_primitive_id && indirect_hit.m_primitive_id != hit_result.m_primitive_id)
+		// BSDF-sampling strategy: if the scattered ray lands on *any* emitter, add its
+		// contribution weighted by MIS. This must cover every emitter, not just the one
+		// chosen for light sampling above, or multi-emitter scenes lose energy (and since
+		// emission is only added directly at depth 0, that energy is never recovered).
+		if (indirect_hit_something && indirect_hit.m_primitive_id != hit_result.m_primitive_id)
 		{
-			if (light)
+			auto& hit_material = m_pResourceManager->get_material(indirect_hit.m_material_id);
+			if (hit_material->can_emit_light())
 			{
-				float light_pdf = light->pdf(hit_result.m_position, indirect_ray.m_direction);
+				const CTriangle& hit_light = scene->get_area_light(indirect_hit.m_primitive_id);
+				float light_pdf = hit_light.pdf(hit_result.m_position, indirect_ray.m_direction);
 				if (light_pdf > 0.f)
 				{
-					auto& light_material = m_pResourceManager->get_material(light->get_material_id());
-					auto emittance = light_material->emit(indirect_hit);
-					float weight = balance_heuristic(bsdf_pdf, light_pdf);
-					out_color += throughput * emittance * bsdf * cos_theta_i * weight / (bsdf_pdf * light_probability);
+					// Light-sampling pdf for this emitter = solid-angle pdf * 1/N selection prob.
+					float light_sampling_pdf = light_pdf * light_probability;
+					auto emittance = hit_material->emit(indirect_hit);
+					float weight = balance_heuristic(bsdf_pdf, light_sampling_pdf);
+					out_color += throughput * emittance * bsdf * cos_theta_i * weight / bsdf_pdf;
 				}
 			}
 		}
@@ -343,7 +353,9 @@ glm::vec3 CIntegrator::integrate(CScene* scene, FRay ray, int32_t bounces, const
 		CLightSource* light{ nullptr };
 		float light_probability = scene->get_light_probability();
 		auto light_index = scene->get_light_index(sampler->sample());
-		if (!std::isinf(light_probability))
+		// Skip direct lighting on alpha-cut-out samples: the point is see-through this
+		// sample, so it must not be shaded — the ray just passes through below.
+		if (!is_transparent && !std::isinf(light_probability))
 		{
 			light = scene->get_light(light_index).get();
 		
