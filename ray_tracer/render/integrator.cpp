@@ -369,6 +369,15 @@ glm::vec3 CIntegrator::integrate(CScene* scene, FRay ray, int32_t bounces, const
 		glm::vec4 diffuse = material->sample_diffuse_color(hit_result);
 		glm::vec2 mr = material->sample_surface_metallic_roughness(hit_result);
 		glm::vec3 normal = material->sample_surface_normal(hit_result);
+
+		// Orient the shading frame to the geometric *outward* normal rather than the
+		// ray-facing normal produced by set_face_normal(). The BSDF is two-sided (it keys the
+		// refraction index off the sign of cos_theta(wo)), so it needs a consistently oriented
+		// frame to distinguish a ray entering a medium (front face) from one leaving it (back
+		// face). Without this, glass->air refraction always used the wrong eta.
+		if (!hit_result.m_bFrontFace)
+			normal = -normal;
+
 		COrthonormalBasis basis(normal);
 
 		bool is_transparent = material->check_transparency(diffuse, material_sample.x);
