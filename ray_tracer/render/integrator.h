@@ -17,6 +17,11 @@ public:
 
 	void trace_ray(CScene* scene, FCameraComponent* camera, const glm::vec3& origin);
 
+	// Interactive preview: trace a single sample per pixel and accumulate it into the colour
+	// attachment. Call repeatedly with an increasing frame_index for progressive refinement;
+	// clear the framebuffer colour attachment to restart accumulation (e.g. on camera move).
+	void render_preview(CScene* scene, FCameraComponent* camera, const glm::vec3& origin, uint32_t frame_index, uint32_t bounces);
+
 	const std::unique_ptr<CFramebuffer>& get_framebuffer() const;
 	const std::vector<uint32_t>& get_pixel_iterator() const;
 private:

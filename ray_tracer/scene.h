@@ -33,6 +33,9 @@ public:
 
 	bool trace_ray(const FRay& ray, float t_min, float t_max, FHitResult& hit_result);
 
+	// World-space bounds of all scene geometry. Valid after build_acceleration().
+	FAxixAlignedBoundingBox get_bounds() const;
+
 	size_t get_area_light_index(float index) const;
 	const CTriangle& get_area_light(size_t index) const;
 	float get_area_light_probability() const;

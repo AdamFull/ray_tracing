@@ -127,6 +127,10 @@ public:
     float sample() override;
     glm::vec2 sample_vec2() override;
 
+	// Re-seed the stream. Used by the interactive preview to decorrelate samples per
+	// pixel and per accumulated frame so the image refines progressively.
+	void reseed(uint64_t initstate, uint64_t initseq) { seed(initstate, initseq); }
+
 	static constexpr uint64_t defaultState = 1753877967969059832ull;
 	static constexpr uint64_t defaultInc = 109ull;
 protected:

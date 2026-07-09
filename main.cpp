@@ -1,5 +1,6 @@
 #include "ray_tracer/engine.h"
 #include "ray_tracer/math/math.hpp"
+#include "ray_tracer/render/preview_session.h"
 #include "util.h"
 
 #include "argparser.h"
@@ -56,6 +57,15 @@ int main(int argc, char** argv)
 	engine->create();
 
 	log_info("Path tracer initialized by {}s", timer.stop<float>());
+
+	// Interactive preview: position the camera / tweak settings, then trigger a full render.
+	if (argparse.exists("--preview"))
+	{
+		run_preview(engine.get());
+		log_info("Preview session finished by {}s.", timer.stop<float>());
+		log_info("Running time {}s.", sw.stop<float>());
+		return 0;
+	}
 
 	engine->update();
 

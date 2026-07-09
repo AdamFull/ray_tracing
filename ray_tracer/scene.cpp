@@ -152,6 +152,14 @@ bool CScene::trace_ray(const FRay& ray, float t_min, float t_max, FHitResult& hi
 	return m_pBVHTree->hit(ray, t_min, t_max, hit_result);
 }
 
+FAxixAlignedBoundingBox CScene::get_bounds() const
+{
+	FAxixAlignedBoundingBox bounds{};
+	for (size_t i = 0ull; i < m_pBVHTree->size(); ++i)
+		bounds.grow(m_pBVHTree->get_triangle(i).bounds());
+	return bounds;
+}
+
 size_t CScene::get_area_light_index(float index) const
 {
 	return m_vLightIds.at(static_cast<size_t>(index * m_vLightIds.size()));

@@ -146,6 +146,34 @@ void CIntegrator::trace_ray(CScene* scene, FCameraComponent* camera, const glm::
 	m_pFramebuffer->add_pixel(x, y, final_normal / static_cast<float>(actual_sample_count), FRAMEBUFFER_NORMAL_ATTACHMENT_FLAG_BIT);
 }
 
+void CIntegrator::render_preview(CScene* scene, FCameraComponent* camera, const glm::vec3& origin, uint32_t frame_index, uint32_t bounces)
+{
+	auto& viewport_extent = camera->m_viewportExtent;
+
+	std::for_each(std::execution::par, m_pixelIterator.begin(), m_pixelIterator.end(),
+		[this, scene, camera, &origin, frame_index, bounces, &viewport_extent](uint32_t index)
+		{
+			auto x = index % viewport_extent.x;
+			auto y = index / viewport_extent.x;
+
+			static thread_local std::unique_ptr<CSamplerBase> sampler;
+			if (!sampler)
+				sampler = std::make_unique<CPCGSampler>(1u);
+
+			// Decorrelate by pixel and accumulated frame so the preview refines over time.
+			static_cast<CPCGSampler*>(sampler.get())->reseed(index + 1u, frame_index + 1u);
+
+			FRay ray{};
+			ray.m_origin = origin;
+			ray.set_direction(camera->m_vRayDirections[index]);
+
+			glm::vec3 albedo{ 0.f }, normal{ 0.f };
+			glm::vec3 color = integrate(scene, ray, bounces, sampler, albedo, normal);
+
+			m_pFramebuffer->add_pixel(x, y, color, FRAMEBUFFER_COLOR_ATTACHMENT_FLAG_BIT);
+		});
+}
+
 glm::vec3 CIntegrator::integrate_nee(CScene* scene, FRay ray, int32_t bounces, const std::unique_ptr<CSamplerBase>& sampler, glm::vec3& surface_albedo, glm::vec3& surface_normal)
 {
 	glm::vec3 throughput{ 1.f };

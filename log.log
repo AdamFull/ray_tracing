@@ -1,0 +1,11 @@
+#Software: Path Tracer
+#Version: 1.0.0
+#Date: 2026-07-09 11:23:22 GMT+2
+#Fields: level time file function line message
+[info][11:23:22] main.cpp int __cdecl main(int, char **)(54:61) : Configuration loaded by 0.0003773s 
+[info][11:23:22] ray_tracer/scene.cpp void __cdecl CScene::create(const std::filesystem::path &)(140:51) : Scene loaded by 0.0006822s. 
+[info][11:23:22] ray_tracer/scene.cpp void __cdecl CScene::build_acceleration(void)(147:53) : BVH tree built by 1.76e-05s. 
+[info][11:23:22] main.cpp int __cdecl main(int, char **)(59:64) : Path tracer initialized by 0.0079213s 
+[info][11:23:23] main.cpp int __cdecl main(int, char **)(72:53) : Image traced by 0.5687486s 
+[info][11:23:23] main.cpp int __cdecl main(int, char **)(84:54) : Result saved by 0.0494687s. 
+[info][11:23:23] main.cpp int __cdecl main(int, char **)(85:48) : Running time 0.62721795s. 
