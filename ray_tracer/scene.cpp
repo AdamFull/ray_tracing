@@ -425,6 +425,20 @@ void CScene::load_materials(const tinygltf::Model& model)
 				material_ci.m_fIor = getDoubleValueOrDefault("ior", data, 1.5);
 			else if(name == "KHR_materials_transmission")
 				material_ci.m_fTransmission = getDoubleValueOrDefault("transmissionFactor", data);
+				else if (name == "KHR_materials_volume")
+				{
+					// Beer-Lambert absorption for the interior volume. A missing attenuationDistance
+					// means +Infinity (no absorption); attenuationColor defaults to white (clear).
+					material_ci.m_attenuationDistance = static_cast<float>(getDoubleValueOrDefault("attenuationDistance", data, std::numeric_limits<double>::infinity()));
+					if (data.Has("attenuationColor"))
+					{
+						auto obj = data.Get("attenuationColor");
+						material_ci.m_attenuationColor = glm::vec3(
+							static_cast<float>(obj.Get(0).GetNumberAsDouble()),
+							static_cast<float>(obj.Get(1).GetNumberAsDouble()),
+							static_cast<float>(obj.Get(2).GetNumberAsDouble()));
+					}
+				}
 		}
 
 		// Create concrete material

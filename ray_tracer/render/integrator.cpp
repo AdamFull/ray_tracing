@@ -341,6 +341,11 @@ glm::vec3 CIntegrator::integrate(CScene* scene, FRay ray, int32_t bounces, const
 	glm::vec3 throughput{ 1.f };
 	glm::vec3 out_color{ 0.f };
 
+	// State for Beer-Lambert volumetric absorption: whether the current path segment is inside
+	// a transmissive medium and, if so, that medium's per-unit absorption coefficient.
+	bool inside_medium = false;
+	glm::vec3 medium_absorption{ 0.f };
+
 	FHitResult hit_result{};
 	auto hit_something = scene->trace_ray(ray, ray_delta, std::numeric_limits<float>::infinity(), hit_result);
 
@@ -492,9 +497,24 @@ glm::vec3 CIntegrator::integrate(CScene* scene, FRay ray, int32_t bounces, const
 
 		glm::vec3 bsdf = material->eval(wi, wo, normal, diffuse, mr);
 
+		// A refraction event (wi on the opposite side of wo) crosses the surface, flipping
+		// whether the next segment is inside the medium; reflection keeps the same side. When
+		// entering a medium, adopt this material's absorption coefficient.
+		bool transmitted = !on_same_hemisphere(wi, wo);
+		glm::vec3 segment_absorption = medium_absorption;
+		if (transmitted && !inside_medium)
+			segment_absorption = material->get_absorption();
+		bool segment_inside = transmitted ? !inside_medium : inside_medium;
+
 		FRay indirect_ray(hit_result.m_position + math::sign(cos_theta(wi)) * normal * ray_delta, basis.to_world(wi));
 		FHitResult indirect_hit{};
 		bool indirect_hit_something = scene->trace_ray(indirect_ray, 0.f, std::numeric_limits<float>::infinity(), indirect_hit);
+
+		// Beer-Lambert transmittance across the segment we are about to traverse, if it runs
+		// through an absorbing medium (thick / coloured glass darkens with depth).
+		glm::vec3 transmittance{ 1.f };
+		if (segment_inside && indirect_hit_something && glm::dot(segment_absorption, segment_absorption) > 0.f)
+			transmittance = glm::exp(-segment_absorption * indirect_hit.m_distance);
 
 		// If the scattered ray lands on an emitter, add its contribution with the MIS weight
 		// (the BSDF-sampling counterpart to the area-light NEE above).
@@ -510,12 +530,15 @@ glm::vec3 CIntegrator::integrate(CScene* scene, FRay ray, int32_t bounces, const
 					float light_sampling_pdf = light_pdf * area_probability;
 					glm::vec3 emittance = hit_material->emit(indirect_hit);
 					float weight = balance_heuristic(bsdf_pdf, light_sampling_pdf);
-					out_color += throughput * emittance * bsdf * cos_theta_i * weight / bsdf_pdf;
+					out_color += throughput * transmittance * emittance * bsdf * cos_theta_i * weight / bsdf_pdf;
 				}
 			}
 		}
 
-		throughput *= bsdf * cos_theta_i / bsdf_pdf;
+		throughput *= bsdf * cos_theta_i / bsdf_pdf * transmittance;
+
+		inside_medium = segment_inside;
+		medium_absorption = segment_absorption;
 
 		float rr_prob = glm::min(0.95f, math::max_component(throughput));
 		if (depth >= m_rrThreshold)

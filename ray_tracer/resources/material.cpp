@@ -26,6 +26,21 @@ void CMaterial::create(const FMaterialCreateInfo& createInfo)
 
 	m_ior = createInfo.m_fIor;
 	m_transmission = createInfo.m_fTransmission;
+
+	m_attenuationColor = createInfo.m_attenuationColor;
+	m_attenuationDistance = createInfo.m_attenuationDistance;
+}
+
+glm::vec3 CMaterial::get_absorption() const
+{
+	// No volume (clear / infinite attenuation distance) -> no absorption.
+	if (!std::isfinite(m_attenuationDistance) || m_attenuationDistance <= 0.f)
+		return glm::vec3(0.f);
+
+	// Beer-Lambert: transmittance over the attenuation distance equals the attenuation colour,
+	// so the per-unit absorption coefficient is -ln(colour) / distance.
+	glm::vec3 color = glm::clamp(m_attenuationColor, glm::vec3(1e-4f), glm::vec3(1.f));
+	return -glm::log(color) / m_attenuationDistance;
 }
 
 glm::vec3 CMaterial::emit(const FHitResult& hit_result) const

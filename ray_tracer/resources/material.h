@@ -39,6 +39,10 @@ struct FMaterialCreateInfo
 
 	float m_fIor{ 1.5f };
 	float m_fTransmission{ 0.f };
+
+	// KHR_materials_volume: Beer-Lambert absorption. Default = clear / infinite -> no absorption.
+	glm::vec3 m_attenuationColor{ 1.f };
+	float m_attenuationDistance{ std::numeric_limits<float>::infinity() };
 };
 
 class COrthonormalBasis
@@ -89,6 +93,10 @@ public:
 	bool can_scatter_light() const;
 	bool can_refract_light() const;
 
+	// Per-unit Beer-Lambert absorption coefficient of the material's interior volume
+	// (zero when the material has no volume / is a clear medium).
+	glm::vec3 get_absorption() const;
+
 	bool check_transparency(const glm::vec4& color, const float sample) const;
 	glm::vec3 sample(const glm::vec3& wo, const glm::vec3& n, const glm::vec2& sample, const glm::vec4& color, const glm::vec2& metallicRoughness, float& pdf) const;
 	glm::vec3 eval(const glm::vec3& wi, const glm::vec3& wo, const glm::vec3& n, const glm::vec4& color, const glm::vec2& metallicRoughness) const;
@@ -116,6 +124,9 @@ protected:
 
 	float m_ior{ 1.5f };
 	float m_transmission{ 0.f };
+
+	glm::vec3 m_attenuationColor{ 1.f };
+	float m_attenuationDistance{ std::numeric_limits<float>::infinity() };
 
 	EAlphaMode m_alphaMode{ EAlphaMode::eOpaque };
 	float m_alphaCutoff{ 0.5f };
