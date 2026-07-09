@@ -78,7 +78,7 @@ void CCameraSystem::recalculate_projection(FCameraComponent* camera)
 	if (camera->m_type == ECameraType::eOrthographic)
 		camera->m_projection = glm::ortho(camera->m_xmag, camera->m_ymag, 0.f, 1.f, camera->m_near, camera->m_far);
 	else
-		camera->m_projection = glm::perspective(camera->m_fov, camera->m_aspect, camera->m_near, camera->m_far);
+		camera->m_projection = glm::perspective(glm::radians(camera->m_fov), camera->m_aspect, camera->m_near, camera->m_far);
 
 	camera->m_invProjection = glm::inverse(camera->m_projection);
 }

@@ -79,7 +79,7 @@ namespace utl
                 get_level<_level>(), _formatted_time,
                 get_source_path(loc), loc.function_name(), 
                 loc.line(), loc.column());
-            auto _user_log = std::vformat(fmt, std::make_format_args(std::forward<_Args>(args)...));
+            auto _user_log = std::vformat(fmt, std::make_format_args(args...));
             return std::format("{} : {} {}", _base, _user_log, trace);
         }
 

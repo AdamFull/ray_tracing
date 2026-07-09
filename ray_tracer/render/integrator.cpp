@@ -325,13 +325,16 @@ glm::vec3 CIntegrator::integrate(CScene* scene, FRay ray, int32_t bounces, const
 		}
 
 		auto& material = m_pResourceManager->get_material(hit_result.m_material_id);
-		if (material->can_emit_light())
-		{
+
+		// Emission is added directly only for the primary ray. Emitters reached by scattering
+		// are accounted for by the BSDF-sampling MIS term (below) at the previous bounce and by
+		// the area-light NEE term; re-adding them here at depth > 0 would double count.
+		if (material->can_emit_light() && depth == 0u)
 			out_color += throughput * material->emit(hit_result);
-		
-			if (!material->can_scatter_light())
-				break;
-		}
+
+		// Nothing left to scatter (pure emitter / fully absorbing): terminate the path.
+		if (!material->can_scatter_light())
+			break;
 
 		auto material_sample = sampler->sample_vec2();
 
@@ -350,93 +353,145 @@ glm::vec3 CIntegrator::integrate(CScene* scene, FRay ray, int32_t bounces, const
 
 		glm::vec3 wo = basis.to_local(glm::normalize(-ray.m_direction));
 
-		CLightSource* light{ nullptr };
-		float light_probability = scene->get_light_probability();
-		auto light_index = scene->get_light_index(sampler->sample());
-		// Skip direct lighting on alpha-cut-out samples: the point is see-through this
-		// sample, so it must not be shaded — the ray just passes through below.
-		if (!is_transparent && !std::isinf(light_probability))
+		// Alpha cut-out sample: the surface is see-through here, so it is neither shaded nor
+		// scattered — the ray continues straight through in the same direction.
+		if (is_transparent)
 		{
-			light = scene->get_light(light_index).get();
-		
-			auto light_pdf = light->get_pdf(hit_result);
-		
-			auto light_direction = light->get_direction(hit_result);
+			FHitResult next_hit{};
+			ray.m_origin = hit_result.m_position;
+			hit_something = scene->trace_ray(ray, ray_delta, std::numeric_limits<float>::infinity(), next_hit);
+			hit_result = next_hit;
+			continue;
+		}
+
+		// ---- Next event estimation -----------------------------------------------------
+
+		// (1) Analytic lights (point / spot / directional). These are delta distributions:
+		//     BSDF sampling can never hit them, so their MIS weight is exactly 1.
+		float analytic_probability = scene->get_light_probability();
+		if (!std::isinf(analytic_probability))
+		{
+			auto* light = scene->get_light(scene->get_light_index(sampler->sample())).get();
+
+			float light_pdf = light->get_pdf(hit_result);
+			glm::vec3 light_direction = light->get_direction(hit_result);
 			glm::vec3 wi = basis.to_local(light_direction);
-		
+
 			float cos_theta_i = glm::abs(cos_theta(wi));
 			if (cos_theta_i > 0.f && light_pdf > 0.f)
 			{
 				FRay shadow_ray(hit_result.m_position + math::sign(cos_theta(wi)) * normal * ray_delta, light_direction);
-				FHitResult shadow_hit;
-		
-				auto distance = light->get_distance(hit_result);
-				bool shadow_hit_something = scene->trace_ray(shadow_ray, 0.f, distance, shadow_hit);
-		
-				bool is_transparent_shadow{ false };
-				if (shadow_hit_something)
+				FHitResult shadow_hit{};
+
+				float distance = light->get_distance(hit_result);
+				bool occluded = scene->trace_ray(shadow_ray, 0.f, distance, shadow_hit);
+
+				// Alpha cut-out occluders don't cast a shadow for this sample.
+				if (occluded)
 				{
 					auto& s_material = m_pResourceManager->get_material(shadow_hit.m_material_id);
 					glm::vec4 s_diffuse = s_material->sample_diffuse_color(shadow_hit);
-					is_transparent_shadow = s_material->check_transparency(s_diffuse, sampler->sample());
+					if (s_material->check_transparency(s_diffuse, sampler->sample()))
+						occluded = false;
 				}
-				
-				if (!shadow_hit_something || is_transparent_shadow)
+
+				if (!occluded)
 				{
 					float bsdf_pdf = material->pdf(wi, wo, normal, diffuse, mr);
 					if (bsdf_pdf > 0.f)
 					{
-						auto bsdf = material->eval(wi, wo, normal, diffuse, mr);
-						// Analytic lights are delta distributions: BSDF sampling can never hit
-						// them, so light sampling is the only estimator and its MIS weight is 1.
-						auto light_color = light->get_color(hit_result);
-
-						out_color += throughput * light_color * bsdf * cos_theta_i / (light_pdf * light_probability);
+						glm::vec3 bsdf = material->eval(wi, wo, normal, diffuse, mr);
+						glm::vec3 light_color = light->get_color(hit_result);
+						out_color += throughput * light_color * bsdf * cos_theta_i / (light_pdf * analytic_probability);
 					}
 				}
 			}
 		}
 
+		// (2) Area lights (emissive geometry), sampled by solid angle and combined with BSDF
+		//     sampling via the balance heuristic.
+		float area_probability = scene->get_area_light_probability();
+		if (!std::isinf(area_probability))
+		{
+			size_t area_index = scene->get_area_light_index(sampler->sample());
+			const CTriangle& area_light = scene->get_area_light(area_index);
+
+			float light_pdf{};
+			glm::vec3 light_dir = area_light.sample(hit_result.m_position, sampler->sample_vec2(), light_pdf);
+			glm::vec3 wi = basis.to_local(light_dir);
+
+			float cos_theta_i = glm::abs(cos_theta(wi));
+			if (cos_theta_i > 0.f && light_pdf > 0.f)
+			{
+				FRay shadow_ray(hit_result.m_position + math::sign(cos_theta(wi)) * normal * ray_delta, light_dir);
+				FHitResult light_hit{};
+				bool hit = scene->trace_ray(shadow_ray, 0.f, std::numeric_limits<float>::infinity(), light_hit);
+
+				if (hit && area_index == light_hit.m_primitive_id && light_hit.m_primitive_id != hit_result.m_primitive_id)
+				{
+					float bsdf_pdf = material->pdf(wi, wo, normal, diffuse, mr);
+					if (bsdf_pdf > 0.f)
+					{
+						auto& light_material = m_pResourceManager->get_material(area_light.get_material_id());
+						glm::vec3 emittance = light_material->emit(light_hit);
+						glm::vec3 bsdf = material->eval(wi, wo, normal, diffuse, mr);
+
+						// Combined light-sampling pdf includes the 1/N light-selection prob.
+						float light_sampling_pdf = light_pdf * area_probability;
+						float weight = balance_heuristic(light_sampling_pdf, bsdf_pdf);
+						out_color += throughput * emittance * bsdf * cos_theta_i * weight / light_sampling_pdf;
+					}
+				}
+			}
+		}
+
+		// ---- BSDF sampling (indirect bounce + BSDF-strategy MIS for area lights) --------
+
 		float bsdf_pdf{};
 		glm::vec3 wi = material->sample(wo, normal, material_sample, diffuse, mr, bsdf_pdf);
 		float cos_theta_i = glm::abs(cos_theta(wi));
 		if (cos_theta_i <= 0.f || bsdf_pdf <= 0.f)
-		{
-			if (!is_transparent)
-				break;
-		}
-
-		if (is_transparent)
-		{
-			// Alpha transparency: the ray passes straight through, keeping its world-space
-			// direction (which is already correct — do not re-transform it).
-			FHitResult indirect_hit{};
-			ray.m_origin = hit_result.m_position;
-			hit_something = scene->trace_ray(ray, ray_delta, std::numeric_limits<float>::infinity(), indirect_hit);
-			hit_result = indirect_hit;
-			continue;
-		}
-
-		FHitResult indirect_hit{};
-		ray.m_origin = hit_result.m_position + math::sign(cos_theta(wi)) * normal * ray_delta;
-		ray.set_direction(basis.to_world(wi));
-		hit_something = scene->trace_ray(ray, 0.f, std::numeric_limits<float>::infinity(), indirect_hit);
+			break;
 
 		glm::vec3 bsdf = material->eval(wi, wo, normal, diffuse, mr);
+
+		FRay indirect_ray(hit_result.m_position + math::sign(cos_theta(wi)) * normal * ray_delta, basis.to_world(wi));
+		FHitResult indirect_hit{};
+		bool indirect_hit_something = scene->trace_ray(indirect_ray, 0.f, std::numeric_limits<float>::infinity(), indirect_hit);
+
+		// If the scattered ray lands on an emitter, add its contribution with the MIS weight
+		// (the BSDF-sampling counterpart to the area-light NEE above).
+		if (indirect_hit_something && !std::isinf(area_probability) && indirect_hit.m_primitive_id != hit_result.m_primitive_id)
+		{
+			auto& hit_material = m_pResourceManager->get_material(indirect_hit.m_material_id);
+			if (hit_material->can_emit_light())
+			{
+				const CTriangle& hit_light = scene->get_area_light(indirect_hit.m_primitive_id);
+				float light_pdf = hit_light.pdf(hit_result.m_position, indirect_ray.m_direction);
+				if (light_pdf > 0.f)
+				{
+					float light_sampling_pdf = light_pdf * area_probability;
+					glm::vec3 emittance = hit_material->emit(indirect_hit);
+					float weight = balance_heuristic(bsdf_pdf, light_sampling_pdf);
+					out_color += throughput * emittance * bsdf * cos_theta_i * weight / bsdf_pdf;
+				}
+			}
+		}
+
 		throughput *= bsdf * cos_theta_i / bsdf_pdf;
-		//assert(std::isfinite(throughput) && throughput.r >= 0.0f && throughput.g >= 0.0f && throughput.b >= 0.0f);
-		
+
 		float rr_prob = glm::min(0.95f, math::max_component(throughput));
-		assert(rr_prob > 0.0f && std::isfinite(rr_prob));
 		if (depth >= m_rrThreshold)
 		{
 			if (sampler->sample() > rr_prob)
 				break;
-		
+
 			throughput /= rr_prob;
 		}
 
+		ray = indirect_ray;
 		hit_result = indirect_hit;
+		hit_something = indirect_hit_something;
 	}
 
 	return out_color;
