@@ -56,7 +56,7 @@ namespace math
 
 	inline bool isfinite(const glm::vec3& v) noexcept
 	{
-		return std::isfinite(v.x) || std::isfinite(v.y) || std::isfinite(v.z);
+		return std::isfinite(v.x) && std::isfinite(v.y) && std::isfinite(v.z);
 	}
 
 	inline float sign(float a) noexcept

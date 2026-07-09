@@ -85,16 +85,16 @@ glm::vec3 CMaterial::sample(const glm::vec3& wo, const glm::vec3& n, const glm::
 		u = math::remap(u, 0.0f, diffuse_weight - std::numeric_limits<float>::epsilon(), 0.0f, one_minus_alpha);
 		assert(u >= 0.0f && v < 1.0f);
 	
-		wi = math::sign(cos_theta(wo)) * CCMGSampler::sample_cosine_hemisphere(glm::vec2(u, v));
+		wi = math::sign(cos_theta(wo)) * ImportanceSample::sample_cosine_hemisphere(glm::vec2(u, v));
 		assert(math::is_normalized(wi));
 	}
 	else if (u < diffuse_weight + specular_weight)
 	{
 		u = math::remap(u, diffuse_weight, diffuse_weight + specular_weight - std::numeric_limits<float>::epsilon(), 0.0f, one_minus_alpha);
 		assert(u >= 0.0f && v < 1.0f);
-
+	
 		glm::vec3 wo_upper = math::sign(cos_theta(wo)) * wo;
-		glm::vec3 wh = math::sign(cos_theta(wo)) * CCMGSampler::sample_ggx_vndf(wo_upper, glm::vec2(u, v), metallicRoughness.g);
+		glm::vec3 wh = math::sign(cos_theta(wo)) * ImportanceSample::sample_ggx_vndf(wo_upper, glm::vec2(u, v), metallicRoughness.g);
 		if (glm::dot(wo, wh) < 0.0f)
 			return glm::vec3(0.0f);
 
@@ -108,7 +108,7 @@ glm::vec3 CMaterial::sample(const glm::vec3& wo, const glm::vec3& n, const glm::
 		assert(u >= 0.0f && v < 1.0f);
 	
 		glm::vec3 wo_upper = math::sign(cos_theta(wo)) * wo;
-		glm::vec3 wh = math::sign(cos_theta(wo)) * CCMGSampler::sample_ggx_vndf(wo_upper, glm::vec2(u, v), metallicRoughness.g);
+		glm::vec3 wh = math::sign(cos_theta(wo)) * ImportanceSample::sample_ggx_vndf(wo_upper, glm::vec2(u, v), metallicRoughness.g);
 		if (glm::dot(wo, wh) < 0.0f)
 			return glm::vec3(0.0f);
 	
@@ -183,9 +183,12 @@ glm::vec2 CMaterial::sample_surface_metallic_roughness(const FHitResult& hit_res
 		auto sampled_mr = sample_texture(ETextureType::eMetallRoughness, hit_result.m_texcoord);
 
 		mr.y = mr.y * sampled_mr.g;
-		mr.y = glm::max(0.001f, mr.y * mr.y);
 		mr.x = mr.x * sampled_mr.b;
 	}
+
+	// Convert perceptual roughness to GGX alpha (roughness^2) and clamp away from zero
+	// so perfectly smooth surfaces don't produce a degenerate (NaN) microfacet distribution.
+	mr.y = glm::max(0.001f, mr.y * mr.y);
 
 	return mr;
 }

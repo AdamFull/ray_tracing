@@ -132,9 +132,8 @@ void CFramebuffer::present()
 			color = convertYxy2RGB(Yxy);
 			color = apply_gamma(color, m_gamma);
 #endif
-			//image->set_pixel(x, m_dimensions.y - y - 1u, glm::vec4(linear_to_srgb(color), fragcolor.a));
-			image->set_pixel(x, m_dimensions.y - y - 1u, glm::vec4(ACESTonemap(color), 1.f));
-			//image->set_pixel(x, m_dimensions.y - y - 1u, glm::vec4(color, 1.f));
+			// ACES fit outputs scene-linear color; encode to sRGB before quantizing to 8-bit.
+			image->set_pixel(x, m_dimensions.y - y - 1u, glm::vec4(linear_to_srgb(ACESTonemap(color)), 1.f));
 		}
 	}
 }

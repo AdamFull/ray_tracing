@@ -740,7 +740,7 @@ void CScene::load_camera_component(const entt::entity& target, const tinygltf::N
 	else if (camera.type == "perspective")
 	{
 		cameraComponent.m_type = ECameraType::ePerspective;
-		cameraComponent.m_fov = camera.perspective.yfov;
+		cameraComponent.m_fov = glm::degrees(2.0f * glm::atan(glm::tan(camera.perspective.yfov * 0.5f) * camera.perspective.aspectRatio));
 		cameraComponent.m_near = camera.perspective.znear;
 		cameraComponent.m_far = camera.perspective.zfar;
 		cameraComponent.m_aspect = camera.perspective.aspectRatio;

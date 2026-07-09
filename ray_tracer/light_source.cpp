@@ -62,10 +62,17 @@ float CPointLightSource::get_pdf(const FHitResult& hit_result) const
 
 glm::vec3 CPointLightSource::get_color(const FHitResult& hit_result) const
 {
-	auto distance = get_distance(hit_result);
+	glm::vec3 radiance = m_light->m_color * m_light->m_intencity;
 
+	// A non-positive range means "infinite" (glTF KHR_lights_punctual leaves range
+	// undefined -> 0). Without this guard the windowed falloff divides by zero and the
+	// light renders completely black.
+	if (m_light->m_radius <= 0.f)
+		return radiance;
+
+	auto distance = get_distance(hit_result);
 	float attenuation = glm::clamp(1.f - glm::pow(distance, 2.f) / glm::pow(m_light->m_radius, 2.f), 0.f, 1.f);
-	return m_light->m_color * m_light->m_intencity * attenuation * attenuation;
+	return radiance * attenuation * attenuation;
 }
 
 

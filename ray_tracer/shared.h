@@ -48,6 +48,5 @@ struct FHitResult
 	{
 		m_bFrontFace = glm::dot(ray.m_direction, outward_normal) < std::numeric_limits<float>::epsilon();
 		m_normal = glm::normalize(m_bFrontFace ? outward_normal : -outward_normal);
-		//m_normal = -outward_normal;
 	}
 };

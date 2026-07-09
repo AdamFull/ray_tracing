@@ -44,7 +44,7 @@ float cmj_rnd_rloat(uint32_t i, uint32_t p)
 	i ^= i >> 21;       i *= 0x93fc4795;
 	i ^= 0xdf6e307f;
 	i ^= i >> 17;       i *= 1 | p >> 18;
-	return i * (1.f / 4294967808.0f);
+	return i * (1.0f / 4294967808.0f);
 }
 
 inline uint64_t hash(uint64_t k) 
@@ -57,27 +57,32 @@ inline uint64_t hash(uint64_t k)
 	return k;
 }
 
-CCMGSampler::CCMGSampler(uint32_t samples_per_pixel)
+namespace ImportanceSample
+{
+	
+}
+
+CCMJSampler::CCMJSampler(uint32_t samples_per_pixel) 
 {
 	m_nsamples_x = static_cast<uint32_t>(glm::sqrt(samples_per_pixel));
 	m_nsamples_y = (samples_per_pixel - 1u) / m_nsamples_x + 1u;
 	m_samples_per_pixel = m_nsamples_x * m_nsamples_y;
 }
 
-void CCMGSampler::begin(uint32_t pixel_index)
+void CCMJSampler::begin(uint32_t pixel_index)
 {
 	m_hashed_pixel_index = hash(pixel_index);
 	m_sample_index = 0u;
 	m_next_pattern = 0u;
 }
 
-void CCMGSampler::next()
+void CCMJSampler::next()
 {
 	m_sample_index++;
 	m_next_pattern = 0u;
 }
 
-float CCMGSampler::sample() noexcept
+float CCMJSampler::sample()
 {
 	uint32_t n = m_samples_per_pixel;
 	uint32_t p = m_hashed_pixel_index + m_next_pattern;
@@ -91,12 +96,12 @@ float CCMGSampler::sample() noexcept
 	return glm::min(x, 1.f - std::numeric_limits<float>::epsilon());
 }
 
-float CCMGSampler::sample(float min, float max) noexcept
-{
-	return min + (sample() * (max - min));
-}
+//float CCMJSampler::sample(float min, float max) noexcept
+//{
+//	return min + (sample() * (max - min));
+//}
 
-glm::vec2 CCMGSampler::sample_vec2() noexcept
+glm::vec2 CCMJSampler::sample_vec2()
 {
 	uint32_t m = m_nsamples_x;
 	uint32_t n = m_nsamples_y;
@@ -117,53 +122,88 @@ glm::vec2 CCMGSampler::sample_vec2() noexcept
 	return glm::vec2(x, y);
 }
 
-glm::vec3 CCMGSampler::sample_cosine_hemisphere(const glm::vec2& sample) noexcept
+//
+//x = static_cast<float>(((double)rand() / (RAND_MAX)) + 1.f);
+//y = static_cast<float>(((double)rand() / (RAND_MAX)) + 1.f);
+
+CPCGSampler::CPCGSampler(uint32_t samples_per_pixel)
 {
-	float cosTheta = glm::sqrt(glm::max(0.0f, 1.0f - sample.s));
-	float sinTheta = glm::sqrt(sample.s);
-	float phi = 2.0f * std::numbers::pi_v<float> * sample.t;
-	return glm::vec3(sinTheta * glm::cos(phi), sinTheta * glm::sin(phi), cosTheta);
+	m_samples_per_pixel = samples_per_pixel;
 }
 
-glm::vec3 CCMGSampler::sample_ggx_vndf(const glm::vec3& wo, const glm::vec2& sample, float alpha) noexcept
+void CPCGSampler::begin(uint32_t pixel_index)
 {
-	// Transform view direction to hemisphere configuration
-	glm::vec3 woHemi = glm::normalize(glm::vec3(alpha * wo.x, alpha * wo.y, wo.z));
 	
-	// Create orthonormal basis
-	float length2 = woHemi.x * woHemi.x + woHemi.y * woHemi.y;
-	glm::vec3 b1 = length2 > 0.0f
-		? glm::vec3(-woHemi.y, woHemi.x, 0.0f) * (1.0f / std::sqrt(length2))
-		: glm::vec3(1.0f, 0.0f, 0.0f);
-	glm::vec3 b2 = glm::cross(woHemi, b1);
-	
-	// Parameterization of projected area
-	float r = std::sqrt(sample.x);
-	float phi = 2.0f * std::numbers::pi_v<float> * sample.y;
-	float t1 = r * std::cos(phi);
-	float t2 = r * std::sin(phi);
-	float s = 0.5f * (1.0f + woHemi.z);
-	t2 = (1.0f - s) * std::sqrt(1.0f - t1 * t1) + s * t2;
-	
-	// Reprojection onto hemisphere
-	glm::vec3 whHemi = t1 * b1 + t2 * b2 + std::sqrt(glm::max(0.0f, 1.0f - t1 * t1 - t2 * t2)) * woHemi;
-	
-	// Transforming half vector back to ellipsoid configuration
-	return glm::normalize(glm::vec3(alpha * whHemi.x, alpha * whHemi.y, glm::max(0.0f, whHemi.z)));
 }
 
-glm::vec3 CCMGSampler::sample_ggx(const glm::vec3& wo, const glm::vec2& sample, float alpha) noexcept
+void CPCGSampler::next()
 {
-	float phi = 2.f * std::numbers::pi_v<float> * sample.x;
-	float cosTheta = std::sqrt((1.f - sample.y) / (1.f + (alpha * alpha - 1.f) * sample.y));
-	float sinTheta = std::sqrt(1.f - cosTheta * cosTheta);
+}
+
+float CPCGSampler::sample()
+{
+	float x = static_cast<float>(uniformUint32()) / 0xffffffff;
+	x = glm::min(x, 1.f - std::numeric_limits<float>::epsilon());
+	return x;
+}
+
+glm::vec2 CPCGSampler::sample_vec2()
+{
+	float x = static_cast<float>(uniformUint32()) / 0xffffffff;
+	x = glm::min(x, 1.f - std::numeric_limits<float>::epsilon());
+
+	float y = static_cast<float>(uniformUint32()) / 0xffffffff;
+	y = glm::min(y, 1.f - std::numeric_limits<float>::epsilon());
+	return glm::vec2(x, y);
+}
+
+void CPCGSampler::seed(uint64_t initstate, uint64_t initseq)
+{
+	state_ = 0U;
+	inc_ = (initseq << 1u) | 1u;
+	uniformUint32();
+	state_ += initstate;
+	uniformUint32();
+}
+
+uint32_t CPCGSampler::uniformUint32()
+{
+	uint64_t oldState = state_;
+	state_ = oldState * 6364136223846793005ull + (inc_ | 1);
+	uint32_t xorShifted = static_cast<uint32_t>(((oldState >> 18u) ^ oldState) >> 27u);
+	uint32_t rot = static_cast<uint32_t>(oldState >> 59u);
+	return (xorShifted >> rot) | (xorShifted << ((~rot + 1u) & 31));
+}
 
 
-	glm::vec3 H{ sinTheta * glm::cos(phi), sinTheta * glm::sin(phi), cosTheta };
 
-	glm::vec3 up = glm::abs(wo.z) < 0.999f ? glm::vec3(0.f, 0.f, 1.f) : glm::vec3(1.f, 0.f, 0.f);
-	glm::vec3 tangent = glm::normalize(glm::cross(up, wo));
-	glm::vec3 bitangent = glm::cross(wo, tangent);
+CCRandomSampler::CCRandomSampler(uint32_t samples_per_pixel)
+{
 
-	return glm::normalize(tangent * H.x + bitangent * H.y + wo * H.z);
+}
+
+void CCRandomSampler::begin(uint32_t pixel_index)
+{
+}
+
+void CCRandomSampler::next()
+{
+}
+
+float CCRandomSampler::sample()
+{
+	float x = static_cast<float>((double)rand() / (RAND_MAX));
+	x = glm::min(x, 1.f - std::numeric_limits<float>::epsilon());
+	return x;
+}
+
+glm::vec2 CCRandomSampler::sample_vec2()
+{
+	float x = static_cast<float>((double)rand() / (RAND_MAX));
+	x = glm::min(x, 1.f - std::numeric_limits<float>::epsilon());
+
+	float y = static_cast<float>((double)rand() / (RAND_MAX));
+	y = glm::min(y, 1.f - std::numeric_limits<float>::epsilon());
+
+	return glm::vec2(x, y);
 }
